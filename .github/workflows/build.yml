@@ -23,19 +23,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - label: windows-x64
+          - label: Windows x64
+            id: windows-x64
             runner: windows-latest
             builder: --win nsis portable --x64
-          - label: macos-arm64
+          - label: macOS arm64
+            id: macos-arm64
             runner: macos-15
             builder: --mac dmg zip --arm64
-          - label: macos-x64
+          - label: macOS x64
+            id: macos-x64
             runner: macos-15-intel
             builder: --mac dmg zip --x64
-          - label: linux-x64
+          - label: Linux x64
+            id: linux-x64
             runner: ubuntu-24.04
             builder: --linux AppImage deb --x64
-          - label: linux-arm64
+          - label: Linux arm64
+            id: linux-arm64
             runner: ubuntu-24.04-arm
             builder: --linux AppImage deb --arm64
     env:
@@ -117,14 +122,14 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: screenshots-${{ matrix.label }}
+          name: screenshots-${{ matrix.id }}
           path: test-results/
           if-no-files-found: ignore
 
       - name: Upload packages
         uses: actions/upload-artifact@v4
         with:
-          name: honeybee-${{ matrix.label }}
+          name: honeybee-${{ matrix.id }}
           path: |
             dist/*.exe
             dist/*.dmg
