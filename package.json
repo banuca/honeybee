@@ -11,7 +11,7 @@
     "dev": "cross-env NODE_ENV=development electron .",
     "pack:dir": "electron-builder --dir",
     "start": "electron .",
-    "test": "node test/account-logic.test.js && node test/add-account-flow.test.js && node test/provider-cancellation.test.js && node test/usage-reading.test.js && node test/usage-status-renderer.test.js && node test/storage-safety.test.js && node test/window-and-updates.test.js && node test/account-lifecycle.test.js",
+    "test": "node test/account-logic.test.js && node test/add-account-flow.test.js && node test/provider-cancellation.test.js && node test/usage-reading.test.js && node test/usage-status-renderer.test.js && node test/storage-safety.test.js && node test/window-and-updates.test.js && node test/account-lifecycle.test.js && node test/login-navigation.test.js",
     "test:electron": "electron test/electron-cancel-smoke.js",
     "test:electron:all": "npm run test:electron && npm run test:electron:usage && npm run test:electron:reader && npm run test:electron:failures",
     "test:electron:failures": "node test/run-failure-phases.cjs",

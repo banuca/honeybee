@@ -2867,6 +2867,29 @@ ipcMain.handle('save-settings', (event, settings) => {
 // can close a window and detach its cookie listener mid-flow.
 const activeLoginCaptures = new Map();
 
+/**
+ * Is this URL somewhere a login flow is allowed to go?
+ *
+ * Rejects anything that is not http(s) FIRST. That matters more than it looks:
+ * a custom scheme like `chatgpt://` is how a web page asks the operating system
+ * to hand over to an installed desktop app, and a sign-in that jumps out to
+ * another app can never deposit its cookie in the partition this widget reads.
+ */
+function isAllowedLoginUrl(url, allowedLoginDomains) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch (_) {
+    return { allowed: false, why: 'unparseable URL' };
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    return { allowed: false, why: `non-web scheme ${parsed.protocol}` };
+  }
+  const host = parsed.hostname;
+  const ok = allowedLoginDomains.some((d) => host === d || host.endsWith('.' + d));
+  return { allowed: ok, why: ok ? null : `host ${host} is not an allowed login domain` };
+}
+
 async function captureLoginCookie({
   partition,
   flow,
@@ -2926,24 +2949,16 @@ async function captureLoginCookie({
       } catch (_) {}
     };
 
-    // Security: restrict navigation to trusted domains only
+    // Security: restrict navigation to trusted domains only.
     loginWin.webContents.on('will-navigate', (event, url) => {
-      try {
-        const hostname = new URL(url).hostname;
-        const isAllowed = allowedLoginDomains.some(domain =>
-          hostname === domain || hostname.endsWith('.' + domain)
-        );
-        if (!isAllowed) {
-          event.preventDefault();
-          console.warn('[Security] Blocked login navigation to untrusted domain:', url);
-        } else {
-          // Update title bar to show current URL (read-only)
-          loginWin.setTitle(`${titlePrefix} - ${url}`);
-        }
-      } catch (err) {
+      const verdict = isAllowedLoginUrl(url, allowedLoginDomains);
+      if (!verdict.allowed) {
         event.preventDefault();
-        console.warn('[Security] Blocked login navigation with invalid URL:', url);
+        console.warn(`[Security] Blocked login navigation (${verdict.why}):`, url);
+        return;
       }
+      // Update title bar to show current URL (read-only)
+      loginWin.setTitle(`${titlePrefix} - ${url}`);
     });
 
     // Update title on OAuth redirects and in-page navigation
@@ -2954,10 +2969,48 @@ async function captureLoginCookie({
       loginWin.setTitle(`${titlePrefix} - ${url}`);
     });
 
-    // Security: block popup windows from login page
-    loginWin.webContents.setWindowOpenHandler(() => {
-      console.warn('[Security] Blocked popup window attempt from login page');
-      return { action: 'deny' };
+    // Popups are part of the login flow, not an attack on it: the identity
+    // providers open one. They are allowed ONLY to allowlisted auth domains,
+    // and only on this account's own partition, so a captured cookie lands in
+    // the jar the widget actually reads. Anything else is still refused.
+    loginWin.webContents.setWindowOpenHandler(({ url }) => {
+      const verdict = isAllowedLoginUrl(url, allowedLoginDomains);
+      if (!verdict.allowed) {
+        console.warn(`[Security] Blocked login popup (${verdict.why}):`, url);
+        return { action: 'deny' };
+      }
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          width: 560,
+          height: 720,
+          title: `${titlePrefix} - sign in`,
+          autoHideMenuBar: true,
+          webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            ...(partition ? { partition } : {})
+          }
+        }
+      };
+    });
+
+    // The popup gets the same navigation policy as its parent, and the same
+    // refusal to jump out to another application.
+    loginWin.webContents.on('did-create-window', (child) => {
+      child.webContents.on('will-navigate', (event, url) => {
+        const verdict = isAllowedLoginUrl(url, allowedLoginDomains);
+        if (!verdict.allowed) {
+          event.preventDefault();
+          console.warn(`[Security] Blocked login popup navigation (${verdict.why}):`, url);
+        }
+      });
+      child.webContents.setWindowOpenHandler(({ url }) => {
+        const verdict = isAllowedLoginUrl(url, allowedLoginDomains);
+        return verdict.allowed ? { action: 'allow' } : { action: 'deny' };
+      });
+      // A popup that closes on its own is normal - the provider redirects back
+      // to the opener and the cookie listener below picks the result up.
     });
 
     // Resolve as soon as any of the expected auth cookies is set.
@@ -3036,12 +3089,12 @@ ipcMain.handle('detect-chatgpt-token', (event, partition, flowId) => {
     ],
     allowedLoginDomains: [
       'chatgpt.com',
-      'openai.com',
-      'auth.openai.com',
-      'auth0.openai.com',
+      'openai.com',          // covers auth.openai.com and auth0.openai.com
       'accounts.google.com',
       'appleid.apple.com',
-      'login.microsoftonline.com'
+      'login.microsoftonline.com',
+      'login.live.com',      // Microsoft personal accounts
+      'challenges.cloudflare.com'  // Turnstile, which ChatGPT's login runs
     ]
   }));
 });
