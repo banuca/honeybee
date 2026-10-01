@@ -1,82 +1,34 @@
-# Dependencies
+# Dependencies (package-lock.json IS committed: CI installs with `npm ci`)
 node_modules/
-# package-lock.json is COMMITTED on purpose: `npm ci` - which every
-# verification workflow uses - refuses to run without it, and an
-# unreproducible dependency tree is not something you can verify.
 
-# Build output (electron-builder outputs to dist/ by default, covers NSIS installer, portable .exe, mac .dmg, linux AppImage)
+# Build output
 dist/
-dist-final/
+dist-test/
+release/
 out/
 
-# OS files
+# Test output
+test-results/
+
+# OS and editor files
 .DS_Store
 Thumbs.db
 desktop.ini
-
-# IDE
 .vscode/
 .idea/
 .claude/
+CLAUDE.md
 *.swp
-*.swo
 *~
 
-# Logs
+# Logs and local environment
 *.log
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Environment
 .env
-.env.local
-.env.*.local
+.env.*
 
-# Electron
-*.electron/
-
-# Cache
-.cache/
-.temp/
-
-# Test and verification output (never packaged - see build.files)
-test-results/
-smoke-screenshot.png
-smoke.log
-
-# Local dev scratch files
-msg.txt
-RELEASE_NOTES_DRAFT.md
-CLAUDE.md
-GITHUB_RELEASE_DESCRIPTION.txt
-test-version.js
-
-# Code signing credentials (NEVER COMMIT THESE)
-developer_id.key
-developer_id.csr
-developer_id.p12
-developerID_application.cer
-
-# Temp commit message files
-commit_msg.txt
-
-# Supplied third-party icon exports. These are NOT ours to redistribute: the
-# Figma sheet that was dropped here carries no author, licence or source, so it
-# must never be committed to a public repository. See the delivery notes for
-# what would be needed to use it.
-/icons
-/icons.svg
-
-# Pre-edit source snapshots (kept outside the repo, alongside the review
-# evidence, so an old copy of main.js cannot be mistaken for the current one)
-snapshot-pre-edit/
-
-# The icon SOURCE (assets/icon-source/*.svg) IS committed on purpose: it is what
-# the shipped .ico/.icns/PNGs are generated from, and without it the only copy
-# of the design is a binary. It is not packaged - build.files lists the raster
-# assets explicitly, not assets/**.
-
-# Scratch images a design subagent wrote into the project root during the icon
-# workflow. Never part of a release.
-preview*.png
+# Code-signing material, should there ever be any
+*.p12
+*.key
+*.cer
+*.csr

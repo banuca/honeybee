@@ -1,1486 +1,408 @@
-/* ============================================================================
-   Usage Widget - VS Code Dark Modern / Light Modern (v4.0)
+/* honeybee — one typeface, two palettes, one bold element (the honeycomb meter). */
 
-   Two themes, both from Microsoft's own VS Code defaults. Dark Modern is the
-   default; Light Modern is selected by the toggle at the bottom of the
-   settings panel, which sets data-theme="light" on <html>. Every colour in
-   this file comes from a token in the block below, so the light theme is a
-   token override and nothing else - there are no per-component light rules to
-   keep in step.
+@font-face { font-family: "Plex Mono"; src: url("fonts/ibm-plex-mono-400.woff2") format("woff2"); font-weight: 400; font-display: block; }
+@font-face { font-family: "Plex Mono"; src: url("fonts/ibm-plex-mono-500.woff2") format("woff2"); font-weight: 500; font-display: block; }
+@font-face { font-family: "Plex Mono"; src: url("fonts/ibm-plex-mono-600.woff2") format("woff2"); font-weight: 600; font-display: block; }
 
-   Reference: Microsoft's own Dark Modern theme
-   https://raw.githubusercontent.com/microsoft/vscode/main/extensions/theme-defaults/themes/dark_modern.json
-
-     editor background          #1F1F1F   main surface
-     side/panel background      #181818   title bar, footer, overlays
-     border / panel border      #2B2B2B   separators and outlines
-     input background           #313131   with #3C3C3C borders
-     foreground                 #CCCCCC   body text
-     descriptionForeground      #9D9D9D   secondary text
-     focusBorder / button bg    #0078D4   the one accent
-
-   Type: the platform's own UI face - Segoe UI on Windows, San Francisco on
-   macOS, whatever the desktop provides on Linux.
-
-   One thing about weights, measured rather than assumed (the audit in
-   test/electron-screenshot-probe.js reports the faces Chromium actually
-   resolved): Segoe UI ships Light, Semilight, Regular, Semibold and Bold - and
-   NO Medium. On Windows a `font-weight: 500` declaration therefore renders in
-   Segoe UI SEMIBOLD, identical to 600, while the text around it renders in
-   Regular. San Francisco does have a Medium face, so the same declaration is
-   genuinely lighter on macOS.
-   So 500 is used only where a heavier face is WANTED at any weight the
-   platform can offer - headings, and the percentage the widget exists to show.
-   Metadata that should read as part of the surrounding text is 400, because
-   asking for 500 there produced a visibly different face from its neighbours
-   on the primary platform. Nothing is bundled and no
-   Microsoft font is shipped; the stack simply asks for the system UI font and
-   falls back through open faces to sans-serif. A separate monospace token is
-   used only where the content is code-like (a session key, a keyboard hint).
-
-   Design rules:
-   - Compact rows, modest padding, thin separators, 4px radii, quiet secondary
-     actions. No oversized cards, pill clusters, heavy shadows, gradients or
-     decorative editor chrome.
-   - Percentages and countdowns use tabular figures so columns do not jitter.
-   - The usage status bands are unchanged and still mean one thing everywhere
-     (cards, tray, alerts):
-       green   0-79%    #22c55e
-       orange  80-94%   #f59e0b
-       red     95-100%  #ef4444
-     A reading that does not exist is never given one of those colours - it is
-     grey AND says so in words.
-   ========================================================================== */
-
-/* ── Variables ──────────────────────────────────────────────────────────── */
+/* Propolis: the dark resin bees seal the hive with. */
 :root {
-    /* The platform UI face. --font-mono is kept pointing at the same stack so
-       every existing rule stays proportional; --font-code is the deliberate
-       monospace opt-in for code-like content. */
-    --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, Roboto, 'Noto Sans', Ubuntu, Cantarell, sans-serif;
-    --font-mono: var(--font-ui);
-    --font-code: ui-monospace, SFMono-Regular, 'Cascadia Mono', Consolas, 'Liberation Mono', Menlo, monospace;
-
-    /* Dark Modern neutrals. */
-    --bg: #1F1F1F;
-    --bg2: #181818;
-    --border: #2B2B2B;
-    --line: #2B2B2B;
-    --text: #CCCCCC;
-    --strong: #E7E7E7;
-    --muted: #9D9D9D;
-    --faint: #868686;
-    /* Secondary text in the usage rows. */
-    --row-label: #CCCCCC;
-    --row-reset: #9D9D9D;
-    --surface: #202020;
-    --surface-border: #2B2B2B;
-    --input-bg: #313131;
-    --input-border: #3C3C3C;
-    --chip: #2A2A2A;
-    --chip-hover: #333333;
-    --ring-track: #2B2B2B;
-    --track: #2B2B2B;
-    --toggle-off: #3C3C3C;
-    --titlebar-bg: #181818;
-    --titlebar-border: #2B2B2B;
-    /* One quiet elevation for the floating window edge - not a decorative
-       drop shadow. */
-    --shadow: 0 6px 20px rgba(0,0,0,.45);
-    --accent-ink: #FFFFFF;
-
-    /* The single accent, used for primary actions. */
-    --acc: #0078D4;
-    --acc-hover: #026EC1;
-    --acc-soft: rgba(0,120,212,.14);
-    --acc-border: #0078D4;
-    --acc-glow: rgba(0,120,212,.28);
-    /* Keyboard focus. #0078D4 on #1F1F1F is too dark to see reliably as a
-       2px ring, so the ring is lightened while the action colour stays as
-       Microsoft specifies it. */
-    --focus: #4DAAFF;
-
-    /* Usage status bands - the only other colours. Fixed, not configurable. */
-    --ok: #22c55e;
-    --warn: #f59e0b;
-    --crit: #ef4444;
-    --danger-soft: rgba(239,68,68,.12);
-    --danger-border: rgba(239,68,68,.45);
-    --danger-text: #f87171;
-
-    --accent-solid: var(--acc);
-    --accent-grad: var(--acc);
-    --ok-text: var(--ok);
-    --ok-chip-bg: rgba(34,197,94,.14);
-    --crit-text: var(--danger-text);
-    --crit-chip-bg: var(--danger-soft);
-    --crit-card-bg: var(--danger-soft);
-    --crit-card-border: var(--danger-border);
-    --crit-glow: var(--danger-border);
+  color-scheme: dark;
+  --bg: #15110e;
+  --surface: #1d1814;
+  --surface-2: #241e19;
+  --rule: #2e2621;
+  --text: #f2ebe3;
+  --muted: #a3978c;
+  --faint: #6b6058;
+  --honey: #f0a92e;
+  --honey-wash: rgba(240, 169, 46, 0.12);
+  --amber: #e8853a;
+  --ember: #ec6c50;
+  --leaf: #8cc084;
+  --sky: #8fb3d9;
+  --comb-empty: #2b241f;
+  --focus: #f0a92e;
 }
 
-/* ── Light Modern ────────────────────────────────────────────────────────────
-   Microsoft's light_modern.json, mapped onto the same tokens:
-
-     editor background          #FFFFFF   main surface
-     side/panel background      #F8F8F8   title bar, footer, overlays
-     panel/side border          #E5E5E5   separators and outlines
-     input background           #FFFFFF   with #CECECE borders
-     foreground                 #3B3B3B   body text
-     descriptionForeground      #616161   secondary text
-     focusBorder / button bg    #005FB8   the one accent
-
-   The three usage bands keep their meanings and step from Tailwind 500 to 600
-   so they stay legible on white; a 500-weight green on #FFFFFF does not carry
-   enough contrast for a 3px progress bar or an 11px label.
-
-   Only the tokens change. Selectors, spacing, radii and type are shared, so
-   the two themes cannot drift apart.
-   ------------------------------------------------------------------------- */
-:root[data-theme="light"] {
-    --bg: #FFFFFF;
-    --bg2: #F8F8F8;
-    --border: #E5E5E5;
-    --line: #E5E5E5;
-    --text: #3B3B3B;
-    --strong: #1F1F1F;
-    --muted: #616161;
-    --faint: #767676;
-    --row-label: #3B3B3B;
-    --row-reset: #616161;
-    --surface: #F8F8F8;
-    --surface-border: #E5E5E5;
-    --input-bg: #FFFFFF;
-    --input-border: #CECECE;
-    --chip: #F2F2F2;
-    --chip-hover: #E8E8E8;
-    --ring-track: #E5E5E5;
-    --track: #E5E5E5;
-    --toggle-off: #CECECE;
-    --titlebar-bg: #F8F8F8;
-    --titlebar-border: #E5E5E5;
-    /* Lighter than the dark theme's: a heavy shadow on a white window reads
-       as a dialog rather than as a floating widget edge. */
-    --shadow: 0 6px 20px rgba(0,0,0,.16);
-    --accent-ink: #FFFFFF;
-
-    --acc: #005FB8;
-    --acc-hover: #0258A8;
-    --acc-soft: rgba(0,95,184,.10);
-    --acc-border: #005FB8;
-    --acc-glow: rgba(0,95,184,.22);
-    /* #005FB8 on white is already a strong ring, so unlike the dark theme it
-       needs no lightening. */
-    --focus: #005FB8;
-
-    --ok: #16a34a;
-    --warn: #d97706;
-    --crit: #dc2626;
-    --danger-soft: rgba(220,38,38,.08);
-    --danger-border: rgba(220,38,38,.35);
-    --danger-text: #b91c1c;
-    --ok-chip-bg: rgba(22,163,74,.12);
+/* Wax: pale, slightly warm grey. */
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --bg: #f2edea;
+    --surface: #fbf8f6;
+    --surface-2: #f6f1ee;
+    --rule: #e0d8d2;
+    --text: #221c18;
+    --muted: #675e57;
+    --faint: #9d938b;
+    --honey: #b57609;
+    --honey-wash: rgba(181, 118, 9, 0.1);
+    --amber: #b9581b;
+    --ember: #bf3f2a;
+    --leaf: #3d8749;
+    --sky: #3a6ea5;
+    --comb-empty: #e4dcd5;
+    --focus: #b57609;
+  }
 }
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
+* { box-sizing: border-box; }
 
-/* Keyboard focus is visible on every control, and only for keyboard users so
-   a mouse click does not leave a ring behind. Declared once, before the
-   component rules, so nothing has to remember to opt in. */
-:focus { outline: none; }
-:focus-visible {
-    outline: 2px solid var(--focus);
-    outline-offset: 2px;
-    border-radius: 4px;
-}
-.usage-row:focus-visible { outline-offset: -2px; }
-
-body {
-    font-family: var(--font-ui);
-    /* 13px base, per the Dark Modern reference. Metadata steps down to 11-12px
-       and account names up to 14px; nothing relies on the browser default. */
-    font-size: 13px;
-    line-height: 1.45;
-    letter-spacing: normal;
-    overflow: hidden;
-    background: transparent;
-    -webkit-app-region: no-drag;
-    color: var(--text);
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 12px/1.55 "Plex Mono", ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
 }
 
-#app {
-    position: relative;
-    width: 100%;
-    height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 1.5px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+
+.app {
+  container-type: inline-size;
+  container-name: app;
+  height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr);
+  border: 1px solid var(--rule);
 }
 
-/* ── Free-resize grips ──────────────────────────────────────────────────────
-   Transparent windows don't support native OS edge-resize, so these invisible
-   zones drive setBounds() over IPC instead (see setupResizeGrips() in app.js). */
-.resize-grip { position: absolute; -webkit-app-region: no-drag; z-index: 30; }
-.resize-grip-n { top: 0; left: 12px; right: 12px; height: 6px; cursor: ns-resize; }
-.resize-grip-s { bottom: 0; left: 12px; right: 12px; height: 6px; cursor: ns-resize; }
-.resize-grip-e { top: 12px; bottom: 12px; right: 0; width: 6px; cursor: ew-resize; }
-.resize-grip-w { top: 12px; bottom: 12px; left: 0; width: 6px; cursor: ew-resize; }
-.resize-grip-ne { top: 0; right: 0; width: 12px; height: 12px; cursor: nesw-resize; }
-.resize-grip-nw { top: 0; left: 0; width: 12px; height: 12px; cursor: nwse-resize; }
-.resize-grip-se { bottom: 0; right: 0; width: 12px; height: 12px; cursor: nwse-resize; }
-.resize-grip-sw { bottom: 0; left: 0; width: 12px; height: 12px; cursor: nesw-resize; }
+/* ---- title bar --------------------------------------------------------- */
 
-/* ── Widget shell ───────────────────────────────────────────────────────── */
-.widget-container {
-    width: 100vw;
-    height: 100vh;
-    background: var(--bg);
-    overflow: hidden;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    box-shadow: var(--shadow);
-    display: flex;
-    flex-direction: column;
+.titlebar {
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 38px;
+  min-width: 0;
+  padding: 0 6px 0 12px;
+  border-bottom: 1px solid var(--rule);
 }
 
-/* ── Title bar ──────────────────────────────────────────────────────────── */
-.title-bar {
-    -webkit-app-region: drag;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 9px 12px;
-    background: var(--titlebar-bg);
-    border-bottom: 1px solid var(--titlebar-border);
-    flex-shrink: 0;
+/* Small: the logo stands in for the name. */
+@container app (max-width: 359px) {
+  .wordmark { display: none; }
+  .titlebar { gap: 8px; }
 }
+
+.brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.logo { width: 15px; height: 15px; flex: none; }
+.logo-cell { fill: var(--honey); }
+.logo-stripe { stroke: var(--bg); stroke-width: 2.2; }
+.wordmark { font-weight: 600; letter-spacing: -0.01em; }
+
+.tabs { display: flex; gap: 2px; margin-left: auto; -webkit-app-region: no-drag; }
+.tab {
+  border: 0;
+  background: none;
+  padding: 3px 8px;
+  border-radius: 4px;
+  color: var(--faint);
+  cursor: pointer;
+}
+.tab:hover { color: var(--muted); }
+.tab[aria-selected="true"] { color: var(--text); background: var(--surface-2); }
+.tab-count { margin-left: 6px; color: var(--honey); }
+.tab-count:empty { display: none; }
+
+.controls { display: flex; -webkit-app-region: no-drag; }
+.control {
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
+  border: 0; border-radius: 5px; background: none;
+  color: var(--faint);
+  cursor: pointer;
+}
+.control:hover { color: var(--text); background: var(--surface-2); }
+.control[data-action="close"]:hover { color: var(--honey); }
+.control svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; }
+
+/* ---- content ------------------------------------------------------------ */
+
+.content {
+  position: relative;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.panel {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 14px 16px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule) transparent;
+}
+
+.app[data-view="agents"] .usage-panel,
+.app[data-view="usage"] .agents-panel { display: none; }
+
+.panel-title {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.panel-meta { color: var(--faint); font-weight: 400; margin-left: 6px; }
+
+/* Wide: both at once, no tabs. */
+@container app (min-width: 620px) {
+  .tabs { display: none; }
+  .content { grid-template-columns: minmax(0, 1.45fr) minmax(250px, 1fr); }
+  .app[data-view] .agents-panel,
+  .app[data-view] .usage-panel { display: block; }
+  .usage-panel { border-left: 1px solid var(--rule); }
+}
+
+/* ---- sessions ----------------------------------------------------------- */
+
+.sessions { list-style: none; margin: 0; padding: 0; }
+
+.session {
+  position: relative;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  column-gap: 10px;
+  padding: 8px 8px 8px 10px;
+  margin: 0 -8px 2px -10px;
+  border-radius: 6px;
+}
+.session:hover { background: var(--surface); }
+.session[data-status="needs-you"] { background: var(--honey-wash); }
+.session[data-status="needs-you"]::before {
+  content: "";
+  position: absolute; left: 0; top: 8px; bottom: 8px;
+  width: 2px; border-radius: 2px;
+  background: var(--honey);
+}
+
+.glyph { grid-row: 1 / span 2; width: 12px; height: 12px; margin-top: 3px; position: relative; }
+.glyph svg { width: 12px; height: 12px; display: block; overflow: visible; }
 
 .title {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    font-family: var(--font-ui);
-    font-weight: 500;
-    font-size: 13px;
-    color: var(--text);
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.when { color: var(--faint); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+
+.detail {
+  grid-column: 2 / span 2;
+  display: flex; gap: 10px; align-items: baseline;
+  min-width: 0;
+  color: var(--muted);
+}
+.what { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.where { color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+.tag { color: var(--faint); white-space: nowrap; }
+
+.session[data-status="needs-you"] .what { color: var(--honey); font-weight: 500; }
+.session[data-status="failed"] .what { color: var(--ember); }
+.session[data-status="idle"] .title,
+.session[data-status="stopped"] .title { color: var(--muted); }
+
+.dismiss {
+  position: absolute; right: 4px; top: 6px;
+  width: 22px; height: 22px;
+  display: none; place-items: center;
+  border: 0; border-radius: 4px;
+  background: var(--surface-2); color: var(--faint);
+  cursor: pointer;
+}
+.dismiss svg { width: 11px; height: 11px; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; fill: none; }
+.session:hover .dismiss, .dismiss:focus-visible { display: grid; }
+.session:hover .when { visibility: hidden; }
+.dismiss:hover { color: var(--text); }
+
+/* Status glyphs: shape and colour both carry the state. */
+.g-cell { fill: var(--faint); }
+.g-ring { fill: none; stroke: var(--faint); stroke-width: 1.6; }
+.g-mark { fill: none; stroke: var(--bg); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.glyph[data-g="needs-you"] .g-cell { fill: var(--honey); }
+.glyph[data-g="done"] .g-cell { fill: var(--leaf); }
+.glyph[data-g="failed"] .g-cell { fill: var(--ember); }
+.glyph[data-g="stopped"] .g-ring { stroke: var(--muted); }
+
+/* Working: a bright segment steps round the cell, moved by the page's
+   once-a-second clock rather than a continuous animation, so a visible
+   window costs one tiny repaint a second instead of sixty. */
+.glyph[data-g="working"] .g-ring { stroke: var(--sky); opacity: 0.35; }
+.glyph[data-g="working"] .g-seg { fill: none; stroke: var(--sky); stroke-width: 1.8; stroke-linecap: round; stroke-dasharray: 9 24; }
+.glyph[data-g="working"][data-phase="1"] .g-seg { stroke-dashoffset: -5.5; }
+.glyph[data-g="working"][data-phase="2"] .g-seg { stroke-dashoffset: -11; }
+.glyph[data-g="working"][data-phase="3"] .g-seg { stroke-dashoffset: -16.5; }
+.glyph[data-g="working"][data-phase="4"] .g-seg { stroke-dashoffset: -22; }
+.glyph[data-g="working"][data-phase="5"] .g-seg { stroke-dashoffset: -27.5; }
+
+/* Very narrow: one line of detail, no project. */
+@container app (max-width: 339px) {
+  .where { display: none; }
+  .panel { padding-left: 12px; padding-right: 12px; }
+}
+
+/* ---- empty and setup states ------------------------------------------------ */
+
+.empty { color: var(--muted); }
+.empty p { margin: 0 0 10px; max-width: 62ch; }
+.empty .quiet { color: var(--faint); }
+
+.step { display: grid; grid-template-columns: 3ch 1fr; margin: 0 0 16px; }
+.step-mark { color: var(--honey); }
+.step-mark.is-done { color: var(--leaf); }
+.step h3 { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--text); }
+.step p { margin: 0 0 8px; color: var(--muted); max-width: 60ch; }
+.step code { color: var(--text); background: var(--surface-2); padding: 0 4px; border-radius: 3px; }
+
+.button {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--honey);
+  border-radius: 5px;
+  background: none;
+  color: var(--honey);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.button:hover { background: var(--honey-wash); }
+.button.is-quiet { border-color: var(--rule); color: var(--muted); }
+.button.is-quiet:hover { color: var(--text); background: var(--surface); }
+.button[disabled] { opacity: 0.5; cursor: default; }
+.text-button { border: 0; background: none; color: var(--honey); cursor: pointer; padding: 2px 4px; }
+.text-button:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.confirm {
+  margin: 6px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--surface);
+}
+.confirm ul { margin: 4px 0 10px; padding-left: 2.2ch; color: var(--muted); }
+.confirm li { margin-bottom: 2px; }
+.confirm .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.message { margin: 6px 0 0; }
+.message.is-error { color: var(--ember); }
+.message.is-ok { color: var(--leaf); }
+
+/* ---- usage: the honeycomb meter ------------------------------------------ */
+
+.provider { margin: 0 0 18px; }
+.provider-head { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; }
+.provider-name { font-weight: 600; }
+.provider-plan { color: var(--faint); }
+.provider-read { margin-left: auto; color: var(--faint); white-space: nowrap; }
+
+.window {
+  display: grid;
+  grid-template-columns: 7ch 1fr auto;
+  grid-template-areas: "label comb left" ". reset reset";
+  align-items: center;
+  column-gap: 10px;
+  margin: 0 0 9px;
+}
+.window-label { grid-area: label; color: var(--muted); }
+.window-left { grid-area: left; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.window-left small { font-weight: 400; color: var(--faint); font-size: 11px; margin-left: 3px; }
+.window-reset { grid-area: reset; color: var(--faint); font-size: 11px; }
+
+.comb { grid-area: comb; display: flex; gap: 2px; min-width: 0; }
+.cell {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 6px;
+  max-width: 15px;
+  aspect-ratio: 0.866;
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  background: var(--comb-empty);
+}
+.cell i {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  background: var(--honey);
+  transition: height 600ms ease;
+}
+.window[data-level="warn"] .cell i { background: var(--amber); }
+.window[data-level="critical"] .cell i { background: var(--ember); }
+.window[data-level="warn"] .window-left { color: var(--amber); }
+.window[data-level="critical"] .window-left { color: var(--ember); }
+.window[data-reset="true"] .window-left { color: var(--muted); }
+
+@container app (min-width: 420px) { .comb { gap: 3px; } }
+
+.provider .empty p { margin-bottom: 8px; }
+
+/* ---- settings ------------------------------------------------------------- */
+
+.settings {
+  position: absolute; inset: 0;
+  overflow-y: auto;
+  padding: 12px 14px 20px;
+  background: var(--bg);
+}
+.settings-head { display: flex; align-items: baseline; justify-content: space-between; }
+.group { margin: 6px 0 18px; }
+.group h3 { margin: 0 0 8px; font-size: 12px; font-weight: 500; color: var(--faint); }
+
+.connection { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: baseline; margin-bottom: 12px; }
+.connection-name { font-weight: 600; }
+.connection-state { grid-column: 1; color: var(--muted); }
+.connection-state.is-on { color: var(--leaf); }
+.connection-state.is-warn { color: var(--amber); }
+.connection .button { grid-row: 1 / span 2; grid-column: 2; align-self: center; }
+
+.toggle {
+  display: grid; grid-template-columns: 18px 1fr; gap: 10px;
+  align-items: center;
+  padding: 4px 0;
+  cursor: pointer;
+}
+.toggle input {
+  appearance: none; margin: 0;
+  width: 14px; height: 14px;
+  border: 1.4px solid var(--faint);
+  border-radius: 3px;
+  display: grid; place-items: center;
+  cursor: pointer;
+}
+.toggle input:checked { border-color: var(--honey); background: var(--honey); }
+.toggle input:checked::after {
+  content: ""; width: 7px; height: 4px;
+  border: solid var(--bg); border-width: 0 0 1.6px 1.6px;
+  transform: translateY(-1px) rotate(-45deg);
+}
+
+.segments { display: inline-flex; border: 1px solid var(--rule); border-radius: 5px; overflow: hidden; }
+.segments button { border: 0; background: none; padding: 3px 10px; color: var(--muted); cursor: pointer; }
+.segments button + button { border-left: 1px solid var(--rule); }
+.segments button[aria-pressed="true"] { background: var(--surface-2); color: var(--text); }
+
+.about p { margin: 0 0 6px; color: var(--muted); max-width: 64ch; }
+.about .links { display: flex; gap: 12px; flex-wrap: wrap; }
+
+/* ---- status bar ----------------------------------------------------------- */
+
+.statusbar {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 26px;
+  padding: 3px 12px;
+  border-top: 1px solid var(--rule);
+  color: var(--faint);
+  font-size: 11px;
+  white-space: nowrap; overflow: hidden;
+}
+.statusbar .is-error { color: var(--ember); }
+.statusbar .push { margin-left: auto; }
+.statusbar .text-button { font-size: 11px; padding: 0; }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--leaf); flex: none; }
+.dot.is-off { background: var(--ember); }
+
+@media (max-height: 280px) { .statusbar { display: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::after { animation: none !important; transition: none !important; }
 }
-
-/* Minimal white square logo. */
-.app-logo {
-    width: 12px;
-    height: 12px;
-    border-radius: 2px;
-    background: var(--acc);
-    flex-shrink: 0;
-}
-
-.controls {
-    -webkit-app-region: no-drag;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-
-/* Flat: no fill of their own, a subtle one on hover. */
-.control-btn {
-    width: 28px;
-    height: 28px;
-    border: none;
-    background: transparent;
-    color: var(--muted);
-    border-radius: 4px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: var(--font-ui);
-    font-size: 13px;
-    transition: background .12s ease, color .12s ease;
-}
-
-.control-btn:hover {
-    background: var(--chip);
-    color: var(--text);
-}
-
-.close-btn:hover {
-    background: var(--danger-soft);
-    color: var(--danger-text);
-}
-
-.refresh-btn svg { display: block; }
-/* Every control-row icon is a 14px currentColor stroke in a 28px target,
-   so the row reads as one optical system in both themes. The window
-   controls used to be text characters, which sat a pixel high and a weight
-   heavier than their SVG neighbours in whichever font fell back. */
-.control-btn svg { display: block; }
-.config-banner-dismiss svg,
-.update-banner-dismiss svg,
-.login-cancel-btn svg,
-.account-remove-failure-dismiss svg { display: block; }
-.add-account-btn { display: inline-flex; align-items: center; gap: 5px; }
-.add-account-btn svg { display: block; flex-shrink: 0; }
-
-/* Refresh spinning */
-.refresh-btn.spinning svg { animation: spin 1s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ── Loading ────────────────────────────────────────────────────────────── */
-.loading-container {
-    padding: 48px 20px;
-    text-align: center;
-    color: var(--muted);
-    font-size: 13px;
-}
-.spinner {
-    width: 36px;
-    height: 36px;
-    border: 3px solid var(--ring-track);
-    border-top-color: var(--text);
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin: 0 auto 14px;
-}
-
-/* ── Login / add-account flow ───────────────────────────────────────────── */
-.login-container {
-    padding: 8px 16px 16px;
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-.login-content { width: 100%; }
-
-.login-topbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 4px 10px;
-}
-.login-title {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--muted);
-}
-.login-cancel-btn {
-    background: transparent;
-    border: none;
-    color: var(--faint);
-    font-size: 14px;
-    cursor: pointer;
-    line-height: 1;
-    padding: 2px 6px;
-}
-.login-cancel-btn:hover { color: var(--text); }
-
-/* Step 0: provider picker */
-.login-step0 {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    align-items: center;
-    padding: 12px 4px;
-}
-.provider-picker-hint {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--muted);
-}
-.provider-picker {
-    display: flex;
-    gap: 12px;
-    width: 100%;
-    justify-content: center;
-}
-.provider-btn {
-    flex: 1;
-    max-width: 220px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    align-items: flex-start;
-    background: var(--surface);
-    border: 1px solid var(--surface-border);
-    border-radius: 4px;
-    padding: 14px 16px;
-    cursor: pointer;
-    text-align: left;
-    transition: border-color .15s ease, background .15s ease;
-}
-.provider-btn:hover {
-    border-color: var(--acc-border);
-    background: var(--bg2);
-}
-.provider-btn-name {
-    color: var(--text);
-    font-size: 15px;
-    font-weight: 500;
-}
-.provider-btn-desc {
-    color: var(--faint);
-    font-size: 11px;
-    font-family: var(--font-mono);
-}
-
-.login-step1 {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    width: 100%;
-}
-.step-icon svg { color: var(--text); flex-shrink: 0; }
-.step-text { flex: 1; }
-.step-text h3 { color: var(--text); font-size: 14px; margin-bottom: 2px; font-weight: 500; }
-.step-text p { color: var(--muted); font-size: 11px; margin: 0; }
-.step-hint { color: var(--faint); font-size: 9px; margin-top: 2px; font-style: italic; }
-.step-error { color: var(--crit); font-size: 9px; margin-top: 2px; word-break: break-word; }
-
-.auto-detect-btn {
-    background: var(--acc);
-    color: var(--accent-ink);
-    border: none;
-    padding: 8px 14px;
-    border-radius: 4px;
-    font-family: var(--font-ui);
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    white-space: nowrap;
-    flex-shrink: 0;
-    transition: opacity .15s ease;
-}
-.auto-detect-btn:hover { opacity: .85; }
-.auto-detect-btn:disabled { opacity: .5; cursor: not-allowed; }
-
-.next-step-btn {
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--muted);
-    padding: 8px 10px;
-    border-radius: 4px;
-    font-size: 11px;
-    cursor: pointer;
-    white-space: nowrap;
-    flex-shrink: 0;
-    transition: border-color .15s ease, color .15s ease;
-}
-.next-step-btn:hover { border-color: var(--acc-border); color: var(--text); }
-
-.login-chatgpt {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    width: 100%;
-}
-
-.open-browser-link { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
-.open-browser-link:hover { opacity: .8; }
-
-.session-key-form { display: flex; flex-direction: column; gap: 8px; width: 100%; }
-.session-key-header h3 { color: var(--text); font-size: 13px; margin-bottom: 3px; font-weight: 500; }
-.session-key-header p { color: var(--faint); font-size: 10px; }
-.session-key-header code, code {
-    font-family: var(--font-code);
-}
-.session-key-header code {
-    background: var(--chip);
-    color: var(--text);
-    padding: 1px 4px;
-    border-radius: 3px;
-    font-family: var(--font-mono);
-    font-size: 10px;
-}
-.session-key-input-row { display: flex; gap: 8px; align-items: center; }
-.session-key-input-row input {
-    flex: 1;
-    background: var(--input-bg);
-    border: 1px solid var(--input-border);
-    color: var(--text);
-    padding: 6px 8px;
-    border-radius: 4px;
-    /* A session key IS code: monospace here is content-driven, not decoration. */
-    font-family: var(--font-code);
-    font-size: 12px;
-}
-.session-key-input-row input:focus { border-color: var(--acc-border); }
-.session-key-input-row input::placeholder { color: var(--faint); }
-.connect-btn {
-    background: var(--acc);
-    color: var(--accent-ink);
-    border: none;
-    padding: 8px 14px;
-    border-radius: 4px;
-    font-family: var(--font-ui);
-    font-size: 11px;
-    font-weight: 500;
-    cursor: pointer;
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-.connect-btn:disabled { opacity: .5; cursor: not-allowed; }
-.session-key-footer { display: flex; align-items: center; justify-content: space-between; }
-.session-key-error {
-    color: var(--crit);
-    font-size: 9px;
-    min-height: 14px;
-    max-height: 40px;
-    overflow-y: auto;
-    flex: 1;
-    word-break: break-all;
-    font-family: var(--font-mono);
-}
-.back-step-btn {
-    background: none;
-    border: none;
-    color: var(--faint);
-    font-size: 10px;
-    cursor: pointer;
-    padding: 2px 4px;
-    flex-shrink: 0;
-}
-.back-step-btn:hover { color: var(--text); }
-
-/* Org picker (add-account step 3) */
-.org-picker { display: flex; flex-direction: column; gap: 10px; padding: 8px 4px; }
-.org-picker h3 { font-size: 14px; color: var(--text); font-weight: 500; }
-
-/* No usage state */
-.no-usage-container {
-    padding: 0 16px;
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-.no-usage-content { display: flex; align-items: center; gap: 16px; width: 100%; }
-.no-usage-content svg { color: var(--text); width: 32px; height: 32px; flex-shrink: 0; }
-.no-usage-content h3 { color: var(--text); font-size: 14px; margin-bottom: 2px; font-weight: 500; }
-.no-usage-content p { color: var(--muted); font-size: 11px; }
-
-/* ── Main content — the account card stack ──────────────────────────────── */
-.content {
-    padding: 12px;
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
-}
-
-#accountsContainer {
-    display: flex;
-    flex-direction: column;
-    /* No gap: each block owns its own padding and a single hairline, so
-       nothing accumulates as accounts are added. */
-    gap: 0;
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    padding-right: 4px;
-}
-
-/* ── Account table blocks ───────────────────────────────────────────────── */
-#accountsContainer { container-type: inline-size; container-name: accounts; }
-
-.account-block {
-    position: relative;
-    padding: 7px 0;
-}
-/* One hairline between accounts, none above the first. */
-.account-block + .account-block { border-top: 1px solid var(--line); }
-#accountsContainer > .account-block:first-child { padding-top: 0; }
-
-/* Header: name, quiet provider label, and only the state that is not a clean
-   automatic reading. */
-.account-head {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 5px;
-    min-width: 0;
-}
-.account-name {
-    font-family: var(--font-ui);
-    /* 400, not 500: on Windows 500 resolves to Segoe UI Semibold and the name
-       stopped matching the rows underneath it. The hierarchy is carried by the
-       14px size and the --strong colour, which need no second face. */
-    font-weight: 400;
-    font-size: 14px;
-    line-height: 1.3;
-    color: var(--strong);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
-}
-
-/* Provider name, manual label and read status are all quiet TEXT — no boxes,
-   no uppercase, no tracking. What makes them distinct is the word itself, so
-   none of these states depends on colour to be understood. */
-.account-provider-tag,
-.account-source-tag,
-.account-status-tag {
-    font-family: var(--font-ui);
-    font-size: 11.5px;
-    font-weight: 400;
-    line-height: 1.4;
-    flex-shrink: 0;
-    white-space: nowrap;
-}
-.account-provider-tag { color: var(--faint); }
-.account-source-tag { color: var(--muted); }
-/* Read status - says IN WORDS what the numbers on the card actually are when
-   they are not a fresh successful reading. */
-.account-status-tag.status-stale { color: var(--warn); }
-.account-status-tag.status-unavailable { color: var(--crit); }
-.account-status-tag.status-loading { color: var(--muted); }
-
-/* "Closest to limit" - text, not a pulsing dot. Shown only on the worst
-   account when there are two or more accounts and its highest row has crossed
-   the orange threshold. */
-.account-badge {
-    align-items: center;
-    margin-left: auto;
-    flex-shrink: 0;
-    font-family: var(--font-ui);
-    font-size: 11.5px;
-    font-weight: 400;
-    color: var(--warn);
-    white-space: nowrap;
-}
-
-/* One row per reading: label, thin bar, percentage, countdown. */
-.usage-row {
-    display: grid;
-    grid-template-columns: minmax(104px, 140px) 1fr 46px 66px;
-    column-gap: 10px;
-    align-items: center;
-    height: 28px;
-}
-/* A card whose rows carry no reset window at all (a manual entry, or a read
-   that reported nothing) drops the reset column instead of leaving it empty. */
-.account-block.no-resets .usage-row {
-    grid-template-columns: minmax(104px, 140px) 1fr 46px;
-}
-
-.row-label {
-    font-family: var(--font-ui);
-    font-size: 13px;
-    font-weight: 400;
-    color: var(--row-label);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.row-bar {
-    height: 6px;
-    border-radius: 3px;
-    background: var(--track);
-    overflow: hidden;
-}
-.row-bar-fill {
-    height: 100%;
-    border-radius: 3px;
-    width: 0%;
-    transition: width .5s ease, background .2s ease;
-}
-
-/* Status bands - the only colours. Green < 80, orange 80-95, red >= 95. */
-.row-bar-fill.status-green { background: var(--ok); }
-.row-bar-fill.status-orange { background: var(--warn); }
-.row-bar-fill.status-red { background: var(--crit); }
-/* No reading - deliberately not green, and no bar width is set. */
-.row-bar-fill.status-unknown { background: var(--border); }
-
-.row-pct {
-    font-family: var(--font-ui);
-    font-size: 13px;
-    font-weight: 500;
-    font-variant-numeric: tabular-nums;
-    color: var(--text);
-    text-align: right;
-}
-.row-pct.status-green { color: var(--ok); }
-.row-pct.status-orange { color: var(--warn); }
-.row-pct.status-red { color: var(--crit); }
-.row-pct.status-unknown { color: var(--muted); }
-
-/* Countdown to the reset. The exact reset date/time is on the row's tooltip,
-   so this column stays short at every width. */
-.row-reset {
-    font-family: var(--font-ui);
-    font-size: 12px;
-    /* Secondary metadata: the same face as the label it sits beside. */
-    font-weight: 400;
-    font-variant-numeric: tabular-nums;
-    color: var(--row-reset);
-    text-align: right;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-/* Responsive - the accounts container adapts to its own width instead of the
-   window resizing to fit it (Chrome 120+ container queries). */
-@container accounts (max-width: 400px) {
-    .usage-row {
-        grid-template-columns: minmax(88px, 118px) 1fr 42px 58px;
-        column-gap: 8px;
-    }
-    .account-block.no-resets .usage-row {
-        grid-template-columns: minmax(88px, 118px) 1fr 42px;
-    }
-    .row-label { font-size: 12px; }
-}
-
-/* Reconnect button on an expired account block */
-.account-block.expired .usage-row { opacity: .5; }
-/* The card's connection action.
-   A compact, left-aligned control rather than a full-width red block: "not
-   connected" is a routine state, and a bar the width of the card read as an
-   alarm even when nothing had gone wrong. The red accent is reserved for the
-   one case the provider actually rejected the login (.expired on the card). */
-.account-reconnect-btn {
-    position: relative;
-    margin-top: 6px;
-    background: var(--chip);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    font-family: var(--font-ui);
-    font-size: 11.5px;
-    font-weight: 500;
-    padding: 4px 10px;
-    cursor: pointer;
-    white-space: nowrap;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.account-reconnect-btn:hover { background: var(--chip-hover); }
-.account-block.expired .account-reconnect-btn {
-    background: var(--danger-soft);
-    color: var(--danger-text);
-    border-color: var(--danger-border);
-}
-.account-block.expired .account-reconnect-btn:hover { filter: brightness(1.15); }
-
-/* Widget footer - last child of the content column, so it stays visible while
-   the account list above it scrolls. */
-/* Fixed height on purpose.
-   The graph panel's height is computed from the space this column has left
-   after the footer, so a footer that changes height changes the graph's
-   height. Its text legitimately does change - "Updated 21:31 · 2/3 not
-   current · refresh 5m" is longer than "Updated 21:31 · refresh 5m" - and the
-   graph was quietly resizing whenever an account went stale. One line, always,
-   with the left half ellipsised if it has to be. */
-.widget-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    flex-shrink: 0;
-    margin-top: 8px;
-    padding-top: 8px;
-    height: 26px;
-    overflow: hidden;
-    border-top: 1px solid var(--line);
-}
-.widget-footer span {
-    font-family: var(--font-ui);
-    font-size: 11px;
-    line-height: 17px;
-    font-variant-numeric: tabular-nums;
-    color: var(--muted);
-    white-space: nowrap;
-}
-.widget-footer span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.widget-footer span:last-child { flex-shrink: 0; }
-
-/* ── Update banner ──────────────────────────────────────────────────────── */
-.update-banner {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin: 0 16px 8px;
-    padding: 8px 12px;
-    background: var(--chip);
-    border: 1px solid var(--acc-border);
-    border-radius: 4px;
-}
-.update-banner-text {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text);
-    cursor: pointer;
-    font-weight: 500;
-}
-.update-banner-dismiss {
-    background: none;
-    border: none;
-    color: var(--faint);
-    cursor: pointer;
-    font-size: 12px;
-}
-
-/* ── Expandable / graph ─────────────────────────────────────────────────── */
-.expand-toggle { display: flex; justify-content: center; padding: 2px 0 0; cursor: pointer; flex-shrink: 0; }
-.expand-arrow { color: var(--faint); transition: transform .2s ease; }
-.expand-toggle:hover .expand-arrow { color: var(--muted); }
-.expand-arrow.expanded { transform: rotate(180deg); }
-.expand-section { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 6px; flex-shrink: 0; }
-
-/* The height here is only the design default for the very first paint;
-   applyGraphLayout() in app.js sets an explicit px height whenever the panel
-   is shown, so the account list and footer always get their space first. */
-.graph-section {
-    border-top: 1px solid var(--line);
-    margin-top: 8px;
-    padding: 10px 4px 4px;
-    height: 220px;
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-}
-.graph-section canvas {
-    width: 100% !important;
-    height: auto !important;
-    flex: 1 1 auto;
-    min-height: 0;
-}
-.graph-account-chips {
-    display: none;
-    gap: 4px;
-    margin-bottom: 8px;
-    flex-shrink: 0;
-    background: var(--chip);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 3px;
-}
-/* One line, whatever the account is called: a long name is truncated rather
-   than wrapping the chip row to four lines and squeezing the chart. */
-.graph-account-chip {
-    flex: 1 1 0;
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    background: transparent;
-    border: none;
-    color: var(--muted);
-    font-family: var(--font-ui);
-    font-size: 11px;
-    font-weight: 500;
-    padding: 5px 8px;
-    border-radius: 4px;
-    cursor: pointer;
-}
-.graph-account-chip.active {
-    background: var(--chip-hover);
-    color: var(--text);
-    font-weight: 500;
-}
-.graph-btn.active {
-    background: var(--chip);
-    color: var(--text);
-}
-/* Graph is switched on but the window is too short to show it. The button
-   still reflects the saved preference; it just stops claiming the panel is
-   on screen. Its tooltip says why. */
-.graph-btn.active.suppressed {
-    background: transparent;
-    color: var(--faint);
-}
-
-/* Expanded usage rows built by buildExtraRows(). Same shape as the compact
-   rows above: label, bar, percentage, countdown - no elapsed ring. */
-.usage-section { display: grid; grid-template-columns: minmax(88px,132px) 1fr 62px 72px; align-items: center; column-gap: 10px; height: 28px; }
-.usage-label { font-family: var(--font-ui); font-size: 13px; color: var(--row-label); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.usage-bar-group { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.usage-percentage { font-family: var(--font-ui); font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text); text-align: right; }
-.progress-bar { height: 6px; background: var(--track); border-radius: 3px; overflow: hidden; min-width: 60px; flex: 1; }
-.progress-fill { height: 100%; background: var(--ok); border-radius: 3px; transition: width .5s ease; }
-.progress-fill.status-orange { background: var(--warn); }
-/* No reading on an extra-usage row - muted, never green. */
-.progress-fill.status-unknown { background: var(--border); }
-.usage-percentage.status-unknown { color: var(--muted); }
-.progress-fill.status-red { background: var(--crit); }
-.timer-text { font-family: var(--font-ui); font-size: 12px; font-weight: 400; font-variant-numeric: tabular-nums; color: var(--row-reset); text-align: right; white-space: nowrap; }
-.resets-at-text { font-family: var(--font-ui); font-size: 12px; font-variant-numeric: tabular-nums; color: var(--row-reset); text-align: right; white-space: nowrap; }
-
-/* ── Settings panel ─────────────────────────────────────────────────────── */
-.settings-overlay {
-    position: absolute;
-    inset: 0;
-    background: var(--bg);
-    display: flex;
-    flex-direction: column;
-    border-radius: 4px;
-    overflow: hidden;
-    z-index: 10;
-}
-
-.settings-content { display: flex; flex-direction: column; height: 100%; }
-
-.settings-header {
-    -webkit-app-region: drag;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 18px;
-    border-bottom: 1px solid var(--line);
-    flex-shrink: 0;
-}
-.settings-title { font-family: var(--font-ui); font-weight: 500; font-size: 16px; color: var(--text); }
-.done-settings-btn {
-    -webkit-app-region: no-drag;
-    background: var(--acc);
-    color: var(--accent-ink);
-    border: none;
-    font-family: var(--font-ui);
-    font-weight: 500;
-    font-size: 13px;
-    padding: 6px 16px;
-    border-radius: 4px;
-    cursor: pointer;
-}
-.done-settings-btn:hover { opacity: .85; }
-
-.settings-disclaimer {
-    font-family: var(--font-mono);
-    color: var(--faint);
-    font-size: 9px;
-    text-align: center;
-    padding: 6px 18px 2px;
-}
-
-.settings-rows {
-    flex: 1;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-    padding: 16px 18px;
-}
-
-/* Accounts management */
-.settings-accounts { display: flex; flex-direction: column; gap: 10px; }
-.settings-accounts-header { display: flex; align-items: center; justify-content: space-between; }
-.settings-row-label { font-size: 13px; color: var(--muted); }
-.settings-accounts .settings-row-label {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--muted);
-}
-.add-account-btn {
-    background: var(--acc-soft);
-    border: 1px solid var(--acc-border);
-    color: var(--text);
-    font-family: var(--font-ui);
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    padding: 5px 12px;
-    border-radius: 4px;
-}
-.add-account-btn:hover { filter: brightness(1.25); }
-
-.accounts-list { display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; }
-.account-row {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    row-gap: 6px;
-    gap: 8px;
-    background: var(--surface);
-    border: 1px solid var(--surface-border);
-    border-radius: 4px;
-    padding: 8px 12px;
-}
-.account-provider-tag-mini {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--faint);
-    flex-shrink: 0;
-}
-.account-label-input {
-    flex: 1;
-    /* Below this the name is unreadable; the row wraps rather than shrink it
-       further, which is why .account-row allows wrapping. */
-    min-width: 90px;
-    background: transparent;
-    border: none;
-    color: var(--text);
-    font-family: var(--font-ui);
-    font-size: 13.5px;
-    padding: 2px 0;
-}
-.account-label-input:focus { color: var(--text); }
-/* Per-account connection action. Same quiet chip as Manual — connecting an
-   account is a routine action, not an alarm, so it must not read like the
-   card's red expiry button. The global :focus-visible rule gives it a
-   keyboard ring; nothing here may override that. */
-.account-connect-btn {
-    background: var(--chip);
-    border: 1px solid var(--border);
-    color: var(--muted);
-    font-family: var(--font-ui);
-    font-size: 10.5px;
-    font-weight: 500;
-    cursor: pointer;
-    white-space: nowrap;
-    padding: 4px 10px;
-    border-radius: 4px;
-    flex-shrink: 0;
-}
-.account-connect-btn:hover { color: var(--text); }
-.account-manual-btn {
-    background: var(--chip);
-    border: 1px solid var(--border);
-    color: var(--muted);
-    font-family: var(--font-ui);
-    font-size: 10.5px;
-    font-weight: 500;
-    cursor: pointer;
-    white-space: nowrap;
-    padding: 4px 10px;
-    border-radius: 4px;
-    flex-shrink: 0;
-}
-.account-manual-btn:hover { color: var(--text); }
-.account-manual-btn.active { color: var(--warn); border-color: rgba(245,158,11,.4); }
-.account-remove-btn {
-    background: var(--danger-soft);
-    border: 1px solid var(--danger-border);
-    color: var(--danger-text);
-    font-family: var(--font-ui);
-    font-size: 11px;
-    font-weight: 500;
-    cursor: pointer;
-    white-space: nowrap;
-    padding: 4px 10px;
-    border-radius: 4px;
-    flex-shrink: 0;
-}
-.account-remove-btn:hover { filter: brightness(1.15); }
-
-/* Per-account manual entry editor */
-.account-manual-editor {
-    background: var(--surface);
-    border: 1px solid var(--surface-border);
-    border-radius: 4px;
-    padding: 10px 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-.account-manual-enabled {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    color: var(--muted);
-    font-size: 11.5px;
-    cursor: pointer;
-}
-.account-manual-enabled input { accent-color: var(--acc); cursor: pointer; }
-.account-manual-inputs {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: var(--faint);
-    font-family: var(--font-mono);
-    font-size: 11px;
-}
-.account-manual-inputs input {
-    width: 90px;
-    background: var(--chip);
-    border: 1px solid var(--border);
-    color: var(--text);
-    padding: 6px 8px;
-    border-radius: 4px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-}
-.account-manual-inputs input:focus { border-color: var(--acc-border); }
-.account-manual-footer { display: flex; align-items: center; gap: 10px; }
-.account-manual-save {
-    background: var(--acc);
-    color: var(--accent-ink);
-    border: none;
-    font-family: var(--font-ui);
-    font-size: 11px;
-    font-weight: 500;
-    padding: 5px 12px;
-    border-radius: 4px;
-    cursor: pointer;
-}
-.account-manual-save:hover { opacity: .85; }
-.account-manual-status {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--ok);
-}
-
-.settings-divider { height: 1px; background: var(--line); }
-
-/* Fixed status color legend */
-.status-legend {
-    display: flex;
-    gap: 16px;
-    margin-top: 8px;
-}
-.status-legend-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--muted);
-}
-.legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.legend-dot.status-green { background: var(--ok); }
-.legend-dot.status-orange { background: var(--warn); }
-.legend-dot.status-red { background: var(--crit); }
-
-/* Toggles grid */
-.settings-toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 13px 16px; }
-.settings-col { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.settings-col-disabled { opacity: .5; }
-.settings-row-hint { font-family: var(--font-mono); color: var(--faint); font-size: 9px; }
-
-/* Toggle switch (38x21 pill, 17px knob) */
-.toggle-switch { position: relative; width: 38px; height: 21px; flex-shrink: 0; cursor: pointer; }
-/* The checkbox is deliberately invisible (opacity 0, zero size) so the pill
-   below can be styled instead. That also means a focus ring on the input is a
-   ring on nothing, so keyboard focus is reflected onto the slider the user can
-   actually see. */
-.toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
-.toggle-switch input:focus-visible { outline: none; }
-.toggle-switch input:focus-visible + .toggle-slider {
-    outline: 2px solid var(--focus);
-    outline-offset: 2px;
-}
-.toggle-slider {
-    position: absolute;
-    inset: 0;
-    background: var(--toggle-off);
-    border-radius: 12px;
-    transition: background .2s, box-shadow .2s;
-}
-.toggle-slider::before {
-    content: '';
-    position: absolute;
-    width: 17px;
-    height: 17px;
-    left: 2px;
-    top: 2px;
-    background: var(--muted);
-    border-radius: 50%;
-    transition: transform .2s, background .2s;
-}
-.toggle-switch input:checked + .toggle-slider { background: var(--acc); }
-.toggle-switch input:checked + .toggle-slider::before { transform: translateX(17px); background: var(--accent-ink); }
-.toggle-switch input:disabled + .toggle-slider { cursor: not-allowed; opacity: .5; }
-
-/* Selects (time / date / refresh) */
-.select-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
-.select-field-label { font-size: 11px; color: var(--faint); margin-bottom: 6px; display: block; }
-.settings-select {
-    background-color: var(--input-bg);
-    border-color: var(--input-border);
-    width: 100%;
-    background: var(--surface);
-    border: 1px solid var(--surface-border);
-    border-radius: 4px;
-    padding: 9px 12px;
-    font-family: var(--font-ui);
-    font-size: 13px;
-    color: var(--text);
-    cursor: pointer;
-    -webkit-appearance: none;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239D9D9D' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E");
-    background-position: calc(100% - 15px) center, calc(100% - 10px) center;
-    background-size: 5px 5px, 5px 5px;
-    background-repeat: no-repeat;
-}
-.settings-select:focus { border-color: var(--acc-border); }
-.settings-select option { background: var(--bg2); color: var(--text); }
-
-/* Settings footer */
-.settings-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 12px 18px;
-    border-top: 1px solid var(--line);
-    flex-shrink: 0;
-}
-.settings-version-label { font-family: var(--font-mono); font-size: 10px; color: var(--faint); }
-.settings-update-link { font-family: var(--font-mono); font-size: 10px; color: var(--text); cursor: pointer; }
-.logout-btn { display: none; }
-.coffee-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: var(--chip);
-    border: 1px solid var(--border);
-    color: var(--muted);
-    padding: 9px 16px;
-    border-radius: 4px;
-    font-family: var(--font-ui);
-    font-size: 12.5px;
-    font-weight: 500;
-    cursor: pointer;
-}
-.coffee-btn svg { display: block; flex-shrink: 0; }
-.coffee-btn:hover { color: var(--text); }
-
-/* Scrollbars */
-::-webkit-scrollbar { width: 8px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: var(--muted); }
-
-/* ── Animations ─────────────────────────────────────────────────────────── */
-
-/* ── Configuration banner ───────────────────────────────────────────────────
-   Shown only when the saved configuration could not be used. Same geometry as
-   the update banner so the layout logic does not need a second case; a
-   different border colour because this one is a warning, not news. */
-.config-banner {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
-    background: var(--danger-soft);
-    border-bottom: 1px solid var(--danger-border);
-    flex-shrink: 0;
-}
-.config-banner-text {
-    flex: 1;
-    font-family: var(--font-ui);
-    font-size: 11px;
-    line-height: 1.45;
-    color: var(--text);
-}
-.config-banner-dismiss {
-    background: none;
-    border: none;
-    color: var(--muted);
-    font-size: 11px;
-    cursor: pointer;
-    padding: 2px 4px;
-    flex-shrink: 0;
-}
-.config-banner-dismiss:hover { color: var(--text); }
-
-/* ── Manual-only account form (first-run "Enter usage manually") ─────────── */
-.login-manual {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    align-items: stretch;
-}
-.manual-account-form { display: flex; flex-direction: column; gap: 8px; }
-.manual-field { display: flex; flex-direction: column; gap: 4px; }
-.manual-field-label {
-    font-family: var(--font-ui);
-    font-size: 11px;
-    color: var(--muted);
-}
-.manual-field input {
-    background: var(--input-bg);
-    border: 1px solid var(--input-border);
-    color: var(--text);
-    font-family: var(--font-ui);
-    font-size: 13px;
-    padding: 6px 8px;
-    border-radius: 4px;
-}
-.manual-field input:focus { border-color: var(--acc-border); }
-.manual-field input::placeholder { color: var(--faint); }
-.manual-field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.manual-account-actions { display: flex; align-items: center; gap: 8px; }
-
-/* ── Not-actionable state ───────────────────────────────────────────────────
-   A credential that exists but cannot be opened is not something the user can
-   fix from here, so the control explains and does not invite a click. It stays
-   in the tab order and keeps its accessible name; only the affordance goes. */
-.account-connect-btn.not-actionable,
-.account-reconnect-btn.not-actionable {
-    cursor: default;
-    opacity: .85;
-    color: var(--muted);
-    background: var(--chip);
-    border-color: var(--border);
-}
-
-/* ── Account removal confirmation ──────────────────────────────────────────
-   Sits under the row it belongs to, names the account and says what is lost. */
-.account-remove-confirm {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    row-gap: 6px;
-    background: var(--danger-soft);
-    border: 1px solid var(--danger-border);
-    border-radius: 4px;
-    padding: 8px 12px;
-}
-.account-remove-confirm-text {
-    flex: 1;
-    min-width: 180px;
-    font-family: var(--font-ui);
-    font-size: 11.5px;
-    line-height: 1.45;
-    color: var(--text);
-}
-.account-remove-confirm-yes,
-.account-remove-confirm-no {
-    font-family: var(--font-ui);
-    font-size: 11px;
-    font-weight: 500;
-    cursor: pointer;
-    white-space: nowrap;
-    padding: 4px 10px;
-    border-radius: 4px;
-    flex-shrink: 0;
-}
-.account-remove-confirm-yes {
-    background: var(--danger-soft);
-    border: 1px solid var(--danger-border);
-    color: var(--danger-text);
-}
-.account-remove-confirm-no {
-    background: var(--chip);
-    border: 1px solid var(--border);
-    color: var(--text);
-}
-.account-remove-confirm-yes:hover { filter: brightness(1.15); }
-.account-remove-confirm-no:hover { background: var(--chip-hover); }
-
-/* -- Removal that did not fully succeed -------------------------------------
-   Stays until it is retried or dismissed, and says what is still on disk.
-   Same danger tokens as the confirmation, so it reads as part of the same
-   action in both themes. */
-.account-remove-failure {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    row-gap: 6px;
-    background: var(--danger-soft);
-    border: 1px solid var(--danger-border);
-    border-radius: 4px;
-    padding: 8px 12px;
-}
-.account-remove-failure-text {
-    flex: 1;
-    min-width: 180px;
-    font-family: var(--font-ui);
-    font-size: 11.5px;
-    line-height: 1.45;
-    color: var(--text);
-}
-.account-remove-failure-retry {
-    font-family: var(--font-ui);
-    font-size: 11px;
-    font-weight: 500;
-    cursor: pointer;
-    white-space: nowrap;
-    padding: 4px 10px;
-    border-radius: 4px;
-    flex-shrink: 0;
-    background: var(--chip);
-    border: 1px solid var(--border);
-    color: var(--text);
-}
-.account-remove-failure-retry:hover:not(:disabled) { background: var(--chip-hover); }
-.account-remove-failure-retry:disabled { opacity: .6; cursor: default; }
-.account-remove-failure-dismiss {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--muted);
-    font-size: 11px;
-    line-height: 1;
-    padding: 4px 6px;
-    border-radius: 4px;
-    flex-shrink: 0;
-}
-.account-remove-failure-dismiss:hover { background: var(--chip-hover); }
-.account-remove-failure-retry:focus-visible,
-.account-remove-failure-dismiss:focus-visible {
-    outline: 2px solid var(--focus);
-    outline-offset: 1px;
-}
-
-/* ── Secure-storage note in Settings ─────────────────────────────────────── */
-.accounts-security-note {
-    font-family: var(--font-ui);
-    font-size: 11px;
-    line-height: 1.45;
-    color: var(--text);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-left: 2px solid var(--warn);
-    border-radius: 4px;
-    padding: 8px 10px;
-}
-
-/* A manual-entry message that reports invalid input rather than a save. */
-.account-manual-status.error { color: var(--danger-text); }
-
-/* ── Theme toggle (settings footer) ─────────────────────────────────────────
-   Same quiet treatment as the other footer actions: a bordered, low-contrast
-   button. Its label names the theme it will switch TO, which is the only
-   wording that stays unambiguous when the icon is a moon on a dark background.
-   ------------------------------------------------------------------------- */
-.theme-toggle-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 4px 8px;
-    font-family: var(--font-ui);
-    font-size: 11px;
-    font-weight: 500;
-    line-height: 1.2;
-    color: var(--muted);
-    background: transparent;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    cursor: pointer;
-    transition: color .12s ease, border-color .12s ease, background-color .12s ease;
-}
-
-.theme-toggle-btn:hover {
-    color: var(--strong);
-    border-color: var(--input-border);
-    background: var(--chip);
-}
-
-.theme-toggle-icon {
-    flex-shrink: 0;
-    width: 13px;
-    height: 13px;
-}
-
-.theme-toggle-label {
-    white-space: nowrap;
-}
-
-/* The icon and label that show are a function of the theme, decided here so
-   no script has to keep them in step. In the dark theme the button offers the
-   light one, and the other way round. */
-:root:not([data-theme="light"]) .theme-toggle-moon,
-:root:not([data-theme="light"]) .theme-toggle-to-dark { display: none; }
-:root[data-theme="light"] .theme-toggle-sun,
-:root[data-theme="light"] .theme-toggle-to-light { display: none; }

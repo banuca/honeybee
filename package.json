@@ -1,122 +1,84 @@
 {
-  "name": "claude-usage-widget",
-  "version": "3.0.2",
-  "description": "AI Usage Monitor - a minimal desktop widget for monitoring Claude.ai and ChatGPT usage across multiple accounts, with manual-only tracking",
-  "main": "main.js",
+  "name": "honeybee",
+  "version": "4.0.0",
+  "description": "A tiny desktop widget that shows what your Claude Code and Codex agents are doing, the moment one needs you, and how much of your usage limits is left.",
+  "main": "src/main/main.js",
   "scripts": {
-    "build": "electron-builder",
-    "build:linux": "electron-builder --linux",
-    "build:mac": "electron-builder --mac",
-    "build:win": "electron-builder --win",
-    "dev": "cross-env NODE_ENV=development electron .",
-    "pack:dir": "electron-builder --dir",
     "start": "electron .",
-    "test": "node test/account-logic.test.js && node test/add-account-flow.test.js && node test/provider-cancellation.test.js && node test/usage-reading.test.js && node test/usage-status-renderer.test.js && node test/storage-safety.test.js && node test/window-and-updates.test.js && node test/account-lifecycle.test.js && node test/login-navigation.test.js",
-    "test:electron": "electron test/electron-cancel-smoke.js",
-    "test:electron:all": "npm run test:electron && npm run test:electron:usage && npm run test:electron:reader && npm run test:electron:failures",
-    "test:electron:failures": "node test/run-failure-phases.cjs",
-    "test:electron:reader": "electron test/electron-provider-reader-smoke.js",
-    "test:electron:screens": "electron test/electron-screenshot-probe.js",
-    "test:electron:usage": "electron test/electron-usage-status-smoke.js"
+    "test": "node test/run-unit.js",
+    "test:electron": "electron test/electron-smoke.js",
+    "screens": "electron test/electron-smoke.js --screens test-results/screenshots",
+    "icons": "electron scripts/make-icons.js",
+    "build": "electron-builder --publish=never",
+    "build:win": "electron-builder --win --publish=never",
+    "build:mac": "electron-builder --mac --publish=never",
+    "build:linux": "electron-builder --linux --publish=never",
+    "pack:dir": "electron-builder --dir --publish=never"
   },
   "keywords": [
-    "claude",
+    "claude-code",
+    "codex",
+    "agents",
     "usage",
+    "rate-limits",
     "widget",
     "electron"
   ],
+  "homepage": "https://github.com/banuca/honeybee",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/banuca/honeybee.git"
+  },
   "author": "Bhanuka Kirinde (banuca) <banuca@users.noreply.github.com>",
   "license": "MIT",
-  "copyright": "Copyright © 2026 Bhanuka Kirinde",
   "engines": {
-    "node": ">=22.12.0",
-    "npm": ">=10.0.0"
+    "node": ">=22.12.0"
   },
   "devDependencies": {
-    "cross-env": "^7.0.3",
     "electron": "44.3.0",
     "electron-builder": "^26.16.1"
   },
-  "dependencies": {
-    "chart.js": "^4.5.1",
-    "electron-store": "^8.1.0"
-  },
   "build": {
-    "appId": "com.claudeusage.widget",
-    "productName": "AI-Usage-Monitor",
+    "appId": "com.banuca.honeybee",
+    "productName": "honeybee",
     "copyright": "Copyright © 2026 Bhanuka Kirinde",
     "publish": null,
+    "asar": true,
+    "compression": "maximum",
+    "electronLanguages": [
+      "en-US"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "files": [
+      "package.json",
+      "LICENSE",
+      "src/**/*",
+      "assets/tray/**/*",
+      "assets/icon.png",
+      "!**/*.map",
+      "!**/*.md"
+    ],
     "win": {
       "target": [
         "nsis",
         "portable"
       ],
-      "icon": "assets/icon.ico"
-    },
-    "portable": {
-      "artifactName": "${productName}-${version}-win-portable.${ext}",
-      "unpackDirName": "ai-usage-monitor"
+      "icon": "build/icon-full.png"
     },
     "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
+      "oneClick": true,
+      "perMachine": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "artifactName": "${productName}-${version}-win-Setup.${ext}"
+      "shortcutName": "honeybee",
+      "artifactName": "honeybee-${version}-win-x64-setup.${ext}"
     },
-    "files": [
-      "main.js",
-      "preload.js",
-      "package.json",
-      "LICENSE",
-      "src/**/*",
-      "assets/icon.ico",
-      "assets/icon.icns",
-      "assets/icons/**/*",
-      "assets/tray-icon.png",
-      "assets/tray-icon-mac.png",
-      "assets/tray-icon-linux.png",
-      "node_modules/**/*",
-      "!**/*.map",
-      "!**/*.ts",
-      "!**/*.md",
-      "!**/{test,tests,__tests__,spec,example,examples,docs,doc}/**",
-      "!**/{.eslintrc,.eslintrc.js,.eslintrc.json,.editorconfig,.nycrc,.prettierrc}",
-      "!**/{CHANGELOG,HISTORY,AUTHORS,CONTRIBUTORS}*"
-    ],
-    "linux": {
-      "target": [
-        {
-          "target": "AppImage",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        },
-        {
-          "target": "deb",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        }
-      ],
-      "icon": "assets/icons/",
-      "category": "Utility",
-      "synopsis": "AI Usage Monitor - desktop widget for Claude.ai and ChatGPT usage",
-      "artifactName": "${productName}-${version}-linux-${arch}.${ext}",
-      "desktop": {
-        "entry": {
-          "Name": "AI Usage Monitor",
-          "Comment": "Monitor Claude.ai and ChatGPT usage across accounts",
-          "Categories": "Utility;",
-          "StartupWMClass": "AI-Usage-Monitor"
-        }
-      },
-      "maintainer": "Bhanuka Kirinde <banuca@users.noreply.github.com>",
-      "description": "AI Usage Monitor - a minimal desktop widget for monitoring Claude.ai and ChatGPT usage across multiple accounts, with manual-only tracking"
+    "portable": {
+      "artifactName": "honeybee-${version}-win-x64-portable.${ext}"
     },
-    "electronVersion": "44.3.0",
     "mac": {
       "target": [
         {
@@ -134,19 +96,41 @@
           ]
         }
       ],
-      "icon": "assets/icon.icns",
-      "category": "public.app-category.utilities",
+      "icon": "build/icon.png",
+      "category": "public.app-category.developer-tools",
       "darkModeSupport": true,
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "identity": null,
-      "minimumSystemVersion": "13.0",
-      "artifactName": "${productName}-${version}-mac-${arch}.${ext}"
+      "minimumSystemVersion": "12.0",
+      "extendInfo": {
+        "LSUIElement": false
+      },
+      "artifactName": "honeybee-${version}-mac-${arch}.${ext}"
     },
     "dmg": {
-      "artifactName": "${productName}-${version}-mac-${arch}.${ext}"
+      "artifactName": "honeybee-${version}-mac-${arch}.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icons",
+      "category": "Development",
+      "synopsis": "Watch your coding agents and your usage limits",
+      "maintainer": "Bhanuka Kirinde <banuca@users.noreply.github.com>",
+      "artifactName": "honeybee-${version}-linux-${arch}.${ext}",
+      "desktop": {
+        "entry": {
+          "Name": "honeybee",
+          "Comment": "Watch your Claude Code and Codex agents and your usage limits",
+          "Categories": "Development;Utility;",
+          "StartupWMClass": "honeybee"
+        }
+      }
     },
     "deb": {
       "depends": [

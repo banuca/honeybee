@@ -1,0 +1,163 @@
+name: build
+
+# Every push and pull request: test, package and launch-test on each platform,
+# each on a native runner for its architecture. A pushed v* tag also publishes
+# the packages as a GitHub release, after every platform has passed.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: windows-x64
+            runner: windows-latest
+            builder: --win nsis portable --x64
+          - label: macos-arm64
+            runner: macos-15
+            builder: --mac dmg zip --arm64
+          - label: macos-x64
+            runner: macos-15-intel
+            builder: --mac dmg zip --x64
+          - label: linux-x64
+            runner: ubuntu-24.04
+            builder: --linux AppImage deb --x64
+          - label: linux-arm64
+            runner: ubuntu-24.04-arm
+            builder: --linux AppImage deb --arm64
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Electron on Linux needs a display and its sandbox helper set up; it
+      # refuses to run unsandboxed, which is right, so the helper is fixed
+      # rather than the sandbox switched off.
+      - name: Linux display and sandbox
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb libgtk-3-0 libnotify4 libnss3 libxss1 libxtst6 libatspi2.0-0 libgbm1 libasound2t64
+          sudo chown root:root node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+
+      - name: Unit tests
+        run: npm test
+
+      - name: End-to-end test in Electron, with screenshots
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run --auto-servernum --server-args='-screen 0 1600x1200x24' npm run screens
+          else
+            npm run screens
+          fi
+
+      - name: Package
+        run: npx electron-builder ${{ matrix.builder }} --publish=never
+
+      - name: Launch the packaged app
+        run: |
+          case "$RUNNER_OS" in
+            Windows)
+              node test/packaged-self-test.js dist/win-unpacked/honeybee.exe
+              node test/packaged-self-test.js "$(ls dist/*-portable.exe | head -1)"
+              # The real installer: install silently, launch what it installed,
+              # then uninstall silently and check nothing is left behind.
+              setup=$(ls dist/*-setup.exe | head -1)
+              "$setup" /S
+              installed="$LOCALAPPDATA/Programs/honeybee/honeybee.exe"
+              for i in $(seq 1 60); do [ -f "$installed" ] && break; sleep 1; done
+              test -f "$installed"
+              node test/packaged-self-test.js "$installed"
+              # The uninstaller hands over to a copy of itself and returns early.
+              "$LOCALAPPDATA/Programs/honeybee/Uninstall honeybee.exe" /S
+              for i in $(seq 1 60); do [ ! -f "$installed" ] && break; sleep 1; done
+              test ! -f "$installed"
+              ;;
+            macOS)
+              node test/packaged-self-test.js "$(ls -d dist/mac*/honeybee.app | head -1)/Contents/MacOS/honeybee"
+              ;;
+            Linux)
+              unpacked=$(ls -d dist/linux*unpacked | head -1)
+              sudo chown root:root "$unpacked/chrome-sandbox"
+              sudo chmod 4755 "$unpacked/chrome-sandbox"
+              xvfb-run --auto-servernum node test/packaged-self-test.js "$unpacked/honeybee"
+              appimage=$(ls dist/*.AppImage | head -1)
+              chmod +x "$appimage"
+              APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run --auto-servernum node test/packaged-self-test.js "$appimage"
+              ;;
+          esac
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-${{ matrix.label }}
+          path: test-results/
+          if-no-files-found: ignore
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: honeybee-${{ matrix.label }}
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.zip
+            dist/*.AppImage
+            dist/*.deb
+          if-no-files-found: error
+
+  release:
+    name: publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: honeybee-*
+          path: packages
+          merge-multiple: true
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          ls -la packages
+          notes=".github/release-notes/${TAG}.md"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" packages/* --clobber
+          else
+            gh release create "$TAG" packages/* --title "honeybee ${TAG#v}" --notes-file "$notes" --latest
+          fi

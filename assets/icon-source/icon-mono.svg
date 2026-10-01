@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="AI Usage Monitor">
-  <g fill="#000000">
-    <rect x="96" y="48"  width="160" height="96" rx="48"/>
-    <rect x="96" y="208" width="256" height="96" rx="48"/>
-    <rect x="96" y="368" width="352" height="96" rx="48"/>
-  </g>
-</svg>
