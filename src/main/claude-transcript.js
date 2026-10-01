@@ -113,16 +113,22 @@ function describeTurn(entry) {
 function projectFolder(transcriptPath, cwd) {
   if (!cwd) return null;
   const slug = path.basename(path.dirname(transcriptPath)).toLowerCase();
-  // Not path.resolve: that would prefix a drive letter and change the slug.
-  let folder = String(cwd).replace(/(.)[\\/]+$/, '$1');
+  // Walked as text with either separator, so the answer doesn't depend on
+  // which system wrote the path (and no drive letter is invented).
+  let folder = String(cwd).replace(/\\/g, '/').replace(/(.)\/+$/, '$1');
   for (;;) {
-    if (folder.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase() === slug) {
-      return path.basename(folder) || folder;
-    }
-    const parent = path.dirname(folder);
+    if (folder.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase() === slug) return lastSegment(folder);
+    const cut = folder.lastIndexOf('/');
+    if (cut < 0) return null;
+    const parent = cut === 0 ? '/' : folder.slice(0, cut);
     if (parent === folder) return null;
     folder = parent;
   }
+}
+
+function lastSegment(p) {
+  const parts = String(p).split(/[\\/]/).filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : String(p);
 }
 
 function isMainTurn(entry) {
@@ -154,7 +160,7 @@ function readTranscript(transcriptPath) {
   const lastTurn = describeTurn(lastOf(tail, ['"type":"user"', '"type":"assistant"'], isMainTurn));
   return {
     title: names['custom-title'] || names['ai-title'] || names['last-prompt'] || null,
-    project: projectFolder(transcriptPath, cwd) || (cwd ? path.basename(cwd) : null),
+    project: projectFolder(transcriptPath, cwd) || (cwd ? lastSegment(cwd) : null),
     cwd,
     lastTurn
   };

@@ -60,6 +60,11 @@ jobs:
       - name: Install
         run: npm ci
 
+      # Electron 44 has no install script: its binary is downloaded the first
+      # time the package is asked for its path. Do that now, explicitly.
+      - name: Fetch the Electron binary
+        run: node -e "const p = require('electron'); const fs = require('fs'); if (!fs.existsSync(p)) process.exit(1); console.log(p)"
+
       # Electron on Linux needs a display and its sandbox helper set up; it
       # refuses to run unsandboxed, which is right, so the helper is fixed
       # rather than the sandbox switched off.
@@ -99,9 +104,10 @@ jobs:
               for i in $(seq 1 60); do [ -f "$installed" ] && break; sleep 1; done
               test -f "$installed"
               node test/packaged-self-test.js "$installed"
-              # The uninstaller hands over to a copy of itself and returns early.
-              "$LOCALAPPDATA/Programs/honeybee/Uninstall honeybee.exe" /S
-              for i in $(seq 1 60); do [ ! -f "$installed" ] && break; sleep 1; done
+              # _?= makes the NSIS uninstaller run in place and wait, instead
+              # of handing over to a copy of itself and returning at once.
+              "$LOCALAPPDATA/Programs/honeybee/Uninstall honeybee.exe" /S "_?=$(cygpath -w "$LOCALAPPDATA/Programs/honeybee")"
+              ls -la "$LOCALAPPDATA/Programs/honeybee" || true
               test ! -f "$installed"
               ;;
             macOS)

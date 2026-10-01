@@ -335,7 +335,7 @@ class CodexRollouts {
     this.onSession({
       id: s.id,
       cwd: s.cwd,
-      project: s.cwd ? path.basename(s.cwd.replace(/[\\/]+$/, '')) || s.cwd : null,
+      project: s.cwd ? s.cwd.split(/[\\/]/).filter(Boolean).pop() || s.cwd : null,
       title: s.title,
       originator: s.originator,
       last: s.last,
