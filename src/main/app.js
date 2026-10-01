@@ -646,6 +646,11 @@ function showBubble(ctl) {
   if (process.platform === 'darwin') win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   win.loadFile(path.join(RENDERER, 'bubble.html'));
   win.once('ready-to-show', () => win.showInactive());
+  // Without a GPU (some Linux setups) the first paint can be slow to report;
+  // the bubble must appear regardless, or there is no way back to the window.
+  win.webContents.once('did-finish-load', () => {
+    setTimeout(() => { if (!win.isDestroyed() && !win.isVisible()) win.showInactive(); }, 1200);
+  });
   win.webContents.on('did-finish-load', () => push(ctl));
   win.on('closed', () => { if (ctl.bubble === win) ctl.bubble = null; });
 }
@@ -914,8 +919,11 @@ async function runSelfTest(ctl, file) {
       result.steps.health = res.status;
     }
     collapse(ctl);
-    await new Promise((r) => setTimeout(r, 1500));
-    result.steps.bubble = Boolean(ctl.bubble && !ctl.bubble.isDestroyed() && ctl.bubble.isVisible());
+    const bubbleShown = () => Boolean(ctl.bubble && !ctl.bubble.isDestroyed() && ctl.bubble.isVisible());
+    for (let waited = 0; waited < 10000 && !bubbleShown(); waited += 250) {
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    result.steps.bubble = bubbleShown();
     result.steps.tray = Boolean(ctl.tray);
     result.ok = Boolean(result.steps.rendered && result.steps.health === 200 && result.steps.bubble);
   } catch (err) {

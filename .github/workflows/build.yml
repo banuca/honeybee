@@ -104,10 +104,12 @@ jobs:
               for i in $(seq 1 60); do [ -f "$installed" ] && break; sleep 1; done
               test -f "$installed"
               node test/packaged-self-test.js "$installed"
-              # Uninstall is recorded as evidence, not a gate: the NSIS
-              # uninstaller hands over to a copy of itself in TEMP and returns
-              # at once, and on a runner antivirus can hold files a while.
-              "$LOCALAPPDATA/Programs/honeybee/Uninstall honeybee.exe" /S || echo "::warning::uninstaller exited with $?"
+              # Uninstall the way Windows Settings does: with the command the
+              # installer registered (it carries the per-user switch). Recorded
+              # as evidence, not a gate, while it is being proven.
+              quiet=$(powershell -NoProfile -Command "(Get-ChildItem HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall | Get-ItemProperty | Where-Object { \$_.DisplayName -like 'honeybee*' } | Select-Object -First 1).QuietUninstallString")
+              echo "registered quiet uninstall: $quiet"
+              cmd //c "$quiet" || echo "::warning::uninstaller exited with $?"
               for i in $(seq 1 90); do [ ! -f "$installed" ] && break; sleep 1; done
               if [ -f "$installed" ]; then
                 echo "::warning::honeybee.exe still present 90 s after a silent uninstall"
