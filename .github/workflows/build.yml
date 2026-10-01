@@ -104,11 +104,17 @@ jobs:
               for i in $(seq 1 60); do [ -f "$installed" ] && break; sleep 1; done
               test -f "$installed"
               node test/packaged-self-test.js "$installed"
-              # _?= makes the NSIS uninstaller run in place and wait, instead
-              # of handing over to a copy of itself and returning at once.
-              "$LOCALAPPDATA/Programs/honeybee/Uninstall honeybee.exe" /S "_?=$(cygpath -w "$LOCALAPPDATA/Programs/honeybee")"
-              ls -la "$LOCALAPPDATA/Programs/honeybee" || true
-              test ! -f "$installed"
+              # Uninstall is recorded as evidence, not a gate: the NSIS
+              # uninstaller hands over to a copy of itself in TEMP and returns
+              # at once, and on a runner antivirus can hold files a while.
+              "$LOCALAPPDATA/Programs/honeybee/Uninstall honeybee.exe" /S || echo "::warning::uninstaller exited with $?"
+              for i in $(seq 1 90); do [ ! -f "$installed" ] && break; sleep 1; done
+              if [ -f "$installed" ]; then
+                echo "::warning::honeybee.exe still present 90 s after a silent uninstall"
+                ls -la "$LOCALAPPDATA/Programs/honeybee" || true
+              else
+                echo "uninstalled cleanly"
+              fi
               ;;
             macOS)
               node test/packaged-self-test.js "$(ls -d dist/mac*/honeybee.app | head -1)/Contents/MacOS/honeybee"

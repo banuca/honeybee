@@ -7,11 +7,15 @@
 //   electron test/electron-smoke.js                 assertions only
 //   electron test/electron-smoke.js --screens DIR   also save screenshots
 
-const { app, nativeTheme } = require('electron');
+const { app } = require('electron');
 const fs = require('fs');
 const http = require('http');
 const os = require('os');
 const path = require('path');
+
+// A headless Linux runner has no GPU, and Chromium's page capture fails there
+// unless it renders in software from the start.
+if (process.platform === 'linux') app.disableHardwareAcceleration();
 
 const screensAt = process.argv.indexOf('--screens');
 const screensDir = screensAt > 0 ? path.resolve(process.argv[screensAt + 1] || 'test-results/screenshots') : null;
@@ -103,12 +107,18 @@ function post(port, token, route, body) {
 
 const js = (win, code) => win.webContents.executeJavaScript(code);
 
+// Screenshots are evidence for a person to look at, not assertions: a capture
+// that the platform can't produce is reported and the run carries on.
 async function capture(win, name) {
   if (!screensDir) return;
   fs.mkdirSync(screensDir, { recursive: true });
   await wait(350);
-  const image = await win.webContents.capturePage();
-  fs.writeFileSync(path.join(screensDir, `${name}.png`), image.toPNG());
+  try {
+    const image = await win.webContents.capturePage();
+    fs.writeFileSync(path.join(screensDir, `${name}.png`), image.toPNG());
+  } catch (err) {
+    console.log(`  note  could not capture ${name}: ${err.message}`);
+  }
 }
 
 // ---- the run --------------------------------------------------------------------
