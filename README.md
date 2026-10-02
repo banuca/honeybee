@@ -7,8 +7,9 @@ A small desktop widget for people who run coding agents. It shows what each **Cl
 - **Agents**: every session with its state (working, needs you, done, stopped, failed), with what it's waiting for: *approve a command*, *answer a question*, *review the plan*.
 - **Alerts**: a desktop notification the moment a session needs you or finishes.
 - **Usage**: your 5-hour and weekly limits for Claude and Codex, drawn as a honeycomb that empties as you use it, with reset times.
-- **Out of the way**: pressing ✕ folds the window into a small hexagon that floats on top. It turns honey-coloured when something needs you; click it to open, or drag it anywhere. Quit from the tray icon or the bubble's right-click menu.
-- **Fits anywhere**: from a 300 px sliver to a wide two-column view. Light and dark themes follow your system.
+- **Out of the way**: pressing ✕ turns the window into a bee that flies home to a small hexagon, the hive, which floats on top. It turns honey-coloured when something needs you. Click it and the bee flies back out as the window opens; drag it anywhere. Quit from the tray icon or the hive's right-click menu.
+- **Fits anywhere**: from a 300 px sliver to a wide two-column view, with a divider you can drag. Light and dark themes follow your system.
+- **Your text size**: Ctrl + and Ctrl − (Cmd on a Mac), Ctrl and the mouse wheel, or settings → text size.
 
 Works on Windows, macOS and Linux. Unofficial, and not affiliated with Anthropic or OpenAI.
 
@@ -43,7 +44,7 @@ Open settings (the gear) and press **connect** for each agent. honeybee shows ex
 
 honeybee never signs in to anything and never asks for a password or token.
 
-- **Claude**: Claude Code passes its own 5-hour and weekly readings to the status line command, and honeybee's status line forwards them. **Claude Code only does this in terminal sessions, not in the VS Code extension's panel**, so the numbers update whenever you use Claude Code in a terminal. Only Pro and Max plans have these limits.
+- **Claude**: Claude Code passes its own 5-hour and weekly readings to the status line command, and honeybee's status line forwards them. **Claude Code only does this in terminal sessions, not in the VS Code extension's panel**, so the numbers update whenever you use Claude Code in a terminal. To keep them current while you work in VS Code, turn on the extension's **Use Terminal** setting (`claudeCode.useTerminal`): Claude Code then runs in VS Code's terminal and every reply updates honeybee. When the reading is old, honeybee says so. Only Pro and Max plans have these limits, and Claude Code doesn't report per-model limits, such as the weekly Fable limit, to other apps.
 - **Codex**: Codex writes its rate limits into its session logs (`~/.codex/sessions`) on every turn, and honeybee reads the latest one.
 
 A reading is always a snapshot. honeybee shows when each one was taken, and once a window's reset time passes it shows that window as reset instead of keeping the old number.
@@ -63,6 +64,7 @@ honeybee doesn't sign in to claude.ai, because Anthropic's terms don't allow thi
 - **A custom status line in Claude Code** replaces some of the footer hints in the terminal. If you already had your own, honeybee asks before replacing it and restores it when you disconnect.
 - **Sessions that were already open** when you connected show up after their next prompt.
 - **Linux tray**: stock GNOME hides tray icons unless you add the AppIndicator extension. The bubble works either way.
+- **The bee** flies on Windows and macOS. On Linux the window folds and opens straight away, as some desktops don't let apps place their windows.
 - **Ubuntu 24.04 and later**: if the AppImage won't start, it's Ubuntu's restriction on Electron's sandbox. Install the `.deb` instead, which sets the sandbox up properly, or start the AppImage with `--no-sandbox`.
 
 ## Build from source
