@@ -146,6 +146,7 @@ function render() {
   const needs = state.counts['needs-you'];
   document.getElementById('tab-count').textContent = needs ? String(needs) : '';
   document.title = needs ? `honeybee (${needs})` : 'honeybee';
+  if (dragSplit === null) showSplit(state.settings.split);
   renderAgents();
   renderUsage();
   renderStatusbar();
@@ -342,6 +343,14 @@ function comb(leftPercent) {
   return cells;
 }
 
+// Claude's numbers only arrive from a terminal session, so they can be
+// hours old; past half an hour, say how to get fresh ones.
+const STALE_MS = 30 * 60 * 1000;
+function claudeStale(now) {
+  const d = state.usage.claude;
+  return Boolean(d && d.observedAt && now - d.observedAt > STALE_MS);
+}
+
 function windowRow(w, now) {
   const left = w.over ? 'over' : w.reset ? 'full' : `${w.leftPercent}%`;
   return h('div', { class: 'window', dataset: { level: w.level, reset: String(w.reset) } },
@@ -362,6 +371,9 @@ function providerBlock(agent, data, now) {
   const block = h('div', { class: 'provider' }, head);
   if (data && data.windows.length) {
     for (const w of data.windows) block.append(windowRow(w, now));
+    if (agent === 'claude' && claudeStale(now)) {
+      block.append(h('p', { class: 'provider-note', text: 'Claude Code sends fresh numbers after each reply in a terminal, not from the VS Code panel.' }));
+    }
     return block;
   }
   const empty = h('div', { class: 'empty' });
@@ -384,8 +396,8 @@ function providerBlock(agent, data, now) {
 }
 
 function renderUsage() {
-  if (!changedSince('usage', state.usage, connections(), localeInUse)) return;
   const now = Date.now();
+  if (!changedSince('usage', state.usage, connections(), localeInUse, claudeStale(now))) return;
   document.getElementById('providers').replaceChildren(
     providerBlock('claude', state.usage.claude, now),
     providerBlock('codex', state.usage.codex, now)
@@ -477,6 +489,24 @@ function connectionRow(agent) {
   return wrap;
 }
 
+// Text size, in tenths from 80% to 160%; the keys do the same.
+function zoomStep(zoom, step) {
+  return Math.min(1.6, Math.max(0.8, Math.round((zoom + step * 0.1) * 10) / 10));
+}
+
+function textSize() {
+  const zoom = state.settings.zoom || 1;
+  const key = state.platform === 'darwin' ? 'Cmd' : 'Ctrl';
+  return h('div', { class: 'group' }, h('h3', { text: 'text size' }),
+    h('div', { class: 'size-row' },
+      h('div', { class: 'stepper' },
+        h('button', { 'aria-label': 'Smaller text', disabled: zoom <= 0.8, onclick: () => api.setSetting('zoom', zoomStep(zoom, -1)) }, '−'),
+        h('output', { text: `${Math.round(zoom * 100)}%` }),
+        h('button', { 'aria-label': 'Larger text', disabled: zoom >= 1.6, onclick: () => api.setSetting('zoom', zoomStep(zoom, 1)) }, '+')),
+      zoom !== 1 ? h('button', { class: 'text-button', onclick: () => api.setSetting('zoom', 1) }, 'reset') : null,
+      h('span', { class: 'quiet', text: `or ${key} + and ${key} −` })));
+}
+
 function renderSettings() {
   if (!changedSince('settings', state.settings, connections(), state.server, state.update, state.version, ui)) return;
   const body = document.getElementById('settings-body');
@@ -492,6 +522,7 @@ function renderSettings() {
       toggle('bubbleOnClose', 'fold into a bubble when closed'),
       toggle('alwaysOnTop', 'keep on top of other windows'),
       toggle('launchAtLogin', 'start when you log in')),
+    textSize(),
     h('div', { class: 'group' }, h('h3', { text: 'theme' }), h('div', { class: 'segments' }, segment('system'), segment('dark'), segment('light'))),
     h('div', { class: 'group about' }, h('h3', { text: 'about' }),
       h('p', { text: `honeybee ${state.version}. Everything stays on this computer: honeybee reads your agents' own files and hears their hooks on 127.0.0.1:${state.server.port}. It never signs in to anything.` }),
@@ -505,6 +536,82 @@ function renderSettings() {
       ui.messages.update ? h('p', { class: `message ${ui.messages.update.ok ? 'is-ok' : 'is-error'}`, text: ui.messages.update.text }) : null)
   );
 }
+
+// ---- divider ------------------------------------------------------------------------
+
+// In the wide layout the line between agents and usage can be dragged. The
+// agents panel's share of the width is kept in settings. A double-click, or
+// Home, puts it back; the arrow keys nudge it.
+const DEFAULT_SPLIT = 1.45 / 2.45;
+const content = document.querySelector('.content');
+const divider = document.getElementById('divider');
+let dragSplit = null;
+
+function clampSplit(share) {
+  const width = content.clientWidth || 1;
+  return Math.min(Math.min(0.8, 1 - 250 / width), Math.max(Math.max(0.25, 240 / width), share));
+}
+
+function showSplit(share) {
+  if (share === null || share === undefined) {
+    content.style.removeProperty('--agents-share');
+    content.style.removeProperty('--usage-share');
+    divider.setAttribute('aria-valuenow', String(Math.round(DEFAULT_SPLIT * 100)));
+    return;
+  }
+  const s = clampSplit(share);
+  content.style.setProperty('--agents-share', `${s}fr`);
+  content.style.setProperty('--usage-share', `${1 - s}fr`);
+  divider.setAttribute('aria-valuenow', String(Math.round(s * 100)));
+}
+
+function saveSplit(share) {
+  const value = share === null ? null : Math.round(share * 1000) / 1000;
+  state.settings.split = value;
+  api.setSetting('split', value);
+  showSplit(value);
+}
+
+function splitAt(clientX) {
+  const box = content.getBoundingClientRect();
+  return clampSplit((clientX - box.left) / box.width);
+}
+
+divider.addEventListener('pointerdown', (event) => {
+  if (event.button !== 0) return;
+  divider.setPointerCapture(event.pointerId);
+  divider.classList.add('is-dragging');
+  content.classList.add('is-resizing');
+  dragSplit = splitAt(event.clientX);
+});
+divider.addEventListener('pointermove', (event) => {
+  if (dragSplit === null) return;
+  dragSplit = splitAt(event.clientX);
+  showSplit(dragSplit);
+});
+function endDrag() {
+  if (dragSplit === null) return;
+  const share = dragSplit;
+  dragSplit = null;
+  divider.classList.remove('is-dragging');
+  content.classList.remove('is-resizing');
+  saveSplit(share);
+}
+divider.addEventListener('pointerup', endDrag);
+divider.addEventListener('pointercancel', endDrag);
+// Let go somewhere the page never hears about: the drag still ends.
+divider.addEventListener('lostpointercapture', endDrag);
+divider.addEventListener('dblclick', () => saveSplit(null));
+divider.addEventListener('keydown', (event) => {
+  const current = state.settings.split ?? DEFAULT_SPLIT;
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    event.preventDefault();
+    saveSplit(clampSplit(current + (event.key === 'ArrowLeft' ? -0.02 : 0.02)));
+  } else if (event.key === 'Home') {
+    event.preventDefault();
+    saveSplit(null);
+  }
+});
 
 // ---- live clocks ------------------------------------------------------------------
 
@@ -523,6 +630,7 @@ function tick() {
     const s = state.agents.find((x) => x.key === row.dataset.key);
     if (s) node.textContent = sinceText(s, now);
   }
+  renderUsage();
   for (const node of document.querySelectorAll('.provider-read[data-read]')) {
     node.textContent = readText(Number(node.dataset.read), now);
   }

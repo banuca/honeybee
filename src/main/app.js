@@ -32,6 +32,10 @@ const SEED_WINDOW_MS = 20 * 60 * 1000;
 const BUBBLE_SIZE = 64;
 const MIN_WIDTH = 300;
 const MIN_HEIGHT = 220;
+// Chromium shares zoom between pages of the same origin, and every honeybee
+// page is a local file: the bubble and the fold layer live in a session of
+// their own (in memory only), so zooming the window leaves them be.
+const OVERLAYS = 'honeybee-overlays';
 
 const SETTING_TYPES = {
   theme: (v) => ['system', 'dark', 'light'].includes(v),
@@ -41,7 +45,11 @@ const SETTING_TYPES = {
   notifyDone: (v) => typeof v === 'boolean',
   notifySound: (v) => typeof v === 'boolean',
   launchAtLogin: (v) => typeof v === 'boolean',
-  view: (v) => ['agents', 'usage'].includes(v)
+  view: (v) => ['agents', 'usage'].includes(v),
+  // Text size, as a share of normal; and where the divider sits between the
+  // agents and usage panels, as the agents panel's share of the width.
+  zoom: (v) => typeof v === 'number' && v >= 0.8 && v <= 1.6,
+  split: (v) => v === null || (typeof v === 'number' && v >= 0.25 && v <= 0.8)
 };
 
 const EXTERNAL_ALLOWED = [
@@ -90,6 +98,8 @@ function start({ argv = process.argv, env = process.env, test = null } = {}) {
     foldPlaced: null,
     folding: null,
     lastFold: null,
+    unfolding: null,
+    lastUnfold: null,
     tray: null,
     quitting: false,
     update: null,
@@ -112,7 +122,9 @@ function start({ argv = process.argv, env = process.env, test = null } = {}) {
   });
 
   app.whenReady().then(async () => {
-    session.defaultSession.setPermissionRequestHandler((_wc, _perm, callback) => callback(false));
+    for (const s of [session.defaultSession, session.fromPartition(OVERLAYS)]) {
+      s.setPermissionRequestHandler((_wc, _perm, callback) => callback(false));
+    }
     setupMenu(ctl);
     setupState(ctl, env);
     await startServer(ctl, env);
@@ -159,6 +171,7 @@ function start({ argv = process.argv, env = process.env, test = null } = {}) {
       ctl.main.show();
       ctl.main.focus();
       prepareFold(ctl);
+      fitFoldLayer(ctl);
     }
     hideBubble(ctl);
   }
@@ -197,6 +210,8 @@ const SETTINGS_DEFAULTS = {
   notifySound: true,
   launchAtLogin: false,
   view: 'agents',
+  zoom: 1,
+  split: null,
   windowBounds: null,
   bubblePosition: null,
   claude: { connected: false, previousStatusLine: null, connectedAt: null },
@@ -295,7 +310,7 @@ function snapshotOf(ctl) {
     settings: {
       theme: st.theme, alwaysOnTop: st.alwaysOnTop, bubbleOnClose: st.bubbleOnClose,
       notifyNeedsYou: st.notifyNeedsYou, notifyDone: st.notifyDone, notifySound: st.notifySound,
-      launchAtLogin: st.launchAtLogin, view: st.view
+      launchAtLogin: st.launchAtLogin, view: st.view, zoom: st.zoom, split: st.split
     },
     update: ctl.update,
     seen: ctl.seen
@@ -613,8 +628,32 @@ function createMain(ctl, { show }) {
   win.on('closed', () => { if (ctl.main === win) ctl.main = null; });
   // Windows is logging off or shutting down: let the window really close.
   win.on('session-end', () => { ctl.quitting = true; });
-  win.webContents.on('did-finish-load', () => push(ctl));
+  win.webContents.on('did-finish-load', () => {
+    applyZoom(ctl);
+    push(ctl);
+  });
+  // Text size: Ctrl (Cmd on a Mac) with + or -, 0 for normal, or the wheel.
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown' || !(input.control || input.meta) || input.alt) return;
+    const step = ['=', '+'].includes(input.key) || input.code === 'NumpadAdd' ? 1
+      : ['-', '_'].includes(input.key) || input.code === 'NumpadSubtract' ? -1
+        : input.key === '0' || input.code === 'Numpad0' ? 0 : null;
+    if (step === null) return;
+    event.preventDefault();
+    stepZoom(ctl, step);
+  });
+  win.webContents.on('zoom-changed', (_event, direction) => stepZoom(ctl, direction === 'in' ? 1 : -1));
   return win;
+}
+
+function applyZoom(ctl) {
+  if (ctl.main && !ctl.main.isDestroyed()) ctl.main.webContents.setZoomFactor(ctl.settings.get('zoom'));
+}
+
+// One step bigger (1), smaller (-1), or back to normal (0), in tenths.
+function stepZoom(ctl, step) {
+  const next = step === 0 ? 1 : Math.round((ctl.settings.get('zoom') + step * 0.1) * 10) / 10;
+  setSetting(ctl, 'zoom', Math.min(1.6, Math.max(0.8, next)));
 }
 
 function collapse(ctl) {
@@ -645,7 +684,7 @@ function collapse(ctl) {
 // windows, and without a compositor the layer would show as a black box.
 const FOLD_MS = 920;
 const FOLD_PAD = 24;
-const FOLD_STAGES = ['shown', 'late', 'landed'];
+const FOLD_STAGES = ['shown', 'late', 'landed', 'arrived'];
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -658,20 +697,23 @@ function foldPossible(ctl) {
 function prepareFold(ctl) {
   clearTimeout(ctl.foldTimer);
   if (!foldPossible(ctl) || (ctl.fold && !ctl.fold.isDestroyed())) return;
-  // After the window's own first paint, so the two don't compete.
+  // Just after the window's own first paint, so the two don't compete: the
+  // layer takes a few seconds to load on a busy machine.
   ctl.foldTimer = setTimeout(() => {
     const main = ctl.main;
     if (!main || main.isDestroyed() || !main.isVisible() || (ctl.fold && !ctl.fold.isDestroyed())) return;
     createFoldLayer(ctl);
-  }, 1000);
+  }, 200);
 }
 
-// Where the fold would play now: from the window to the bubble, or, with the
-// bubble on another screen and out of reach, into the window's own centre.
+// Where the fold would play now: from the window to the bubble (where it is,
+// if it is on screen), or, with the bubble on another screen and out of
+// reach, into the window's own centre.
 function foldPlan(ctl) {
   const from = ctl.main.getBounds();
   const display = screen.getDisplayMatching(from);
-  const bubbleAt = bubbleBounds(ctl);
+  const shown = ctl.bubble && !ctl.bubble.isDestroyed() && ctl.bubble.isVisible();
+  const bubbleAt = shown ? ctl.bubble.getBounds() : bubbleBounds(ctl);
   const together = screen.getDisplayMatching(bubbleAt).id === display.id;
   const to = together ? bubbleAt : {
     x: Math.round(from.x + (from.width - BUBBLE_SIZE) / 2),
@@ -726,6 +768,7 @@ function createFoldLayer(ctl) {
     backgroundColor: '#00000000',
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'fold.js'),
+      partition: OVERLAYS,
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
@@ -810,8 +853,9 @@ function placeWithin(rect, region, scale) {
 }
 
 // The snapshot as an uncompressed BMP, at the screen's full resolution.
-// Building one is a copy; a PNG takes most of a third of a second to
+// Building one is a copy; a PNG can take a good part of a second to
 // compress for a large window, and the window can't fold until it's done.
+// Windows only: the raw pixel order is BGRA there, and differs elsewhere.
 function snapshotBmp(image) {
   const scale = Math.max(1, ...image.getScaleFactors());
   const { width, height } = image.getSize(scale);
@@ -865,7 +909,7 @@ async function foldIntoBubble(ctl) {
     let late = false;
     const noteLate = () => { late = true; };
     events.once('late', noteLate);
-    const encoded = snapshotBmp(image) || image.toDataURL();
+    const encoded = (process.platform === 'win32' && snapshotBmp(image)) || image.toDataURL();
     record.encodedAfterMs = Date.now() - started;
     layer.webContents.send('fold:play', {
       image: encoded,
@@ -913,9 +957,81 @@ async function foldIntoBubble(ctl) {
   } finally {
     if (!run.cancelled) {
       ctl.folding = null;
-      releaseFold(ctl);
+      if (record.handedOverAfterMs && !record.error) parkFoldLayer(ctl);
+      else releaseFold(ctl);
     }
     ctl.log(`fold: ${JSON.stringify(record)}`);
+  }
+}
+
+// After a fold the layer stays, emptied and one pixel big over the hive,
+// ready for the bee to fly back out when the bubble is clicked.
+function parkFoldLayer(ctl) {
+  const layer = ctl.fold;
+  if (!layer || layer.isDestroyed()) return;
+  layer.webContents.send('fold:reset');
+  const hive = bubbleBounds(ctl);
+  placeFoldLayer(ctl, { x: hive.x, y: hive.y, width: 1, height: 1 });
+}
+
+// ---- flying back out of the hive --------------------------------------------
+
+const UNFOLD_MS = 700;
+
+function unfoldPossible(ctl) {
+  const main = ctl.main;
+  return Boolean(foldPossible(ctl) && ctl.fold && !ctl.fold.isDestroyed() && ctl.foldLoaded
+    && !ctl.folding && !ctl.unfolding && main && !main.isDestroyed() && !main.isVisible());
+}
+
+// A click on the hive. Anything amiss, and the window simply opens, as it
+// always has.
+function openFromBubble(ctl) {
+  if (unfoldPossible(ctl)) unfoldFromBubble(ctl);
+  else ctl.showMain();
+}
+
+// The bee flies out of the hive to where the window lives, and the window
+// opens there as it arrives.
+async function unfoldFromBubble(ctl) {
+  const main = ctl.main;
+  const layer = ctl.fold;
+  const events = ctl.foldEvents;
+  const started = Date.now();
+  const record = { played: false, openedAfterMs: null, error: null };
+  ctl.unfolding = record;
+  ctl.lastUnfold = record;
+  try {
+    const { from, to, display, together, region } = foldPlan(ctl);
+    if (!together) throw new Error('the hive is on another screen');
+    placeFoldLayer(ctl, region);
+    layer.moveTop();
+    layer.webContents.send('unfold:play', {
+      hive: placeWithin(to, region, display.scaleFactor),
+      window: placeWithin(from, region, display.scaleFactor),
+      ms: UNFOLD_MS
+    });
+    record.played = true;
+    await heard(events, 'arrived', UNFOLD_MS + 1500);
+    ctl.unfolding = null;
+    // Opened some other way in the meantime: nothing more to do.
+    if (ctl.quitting || main.isDestroyed() || main.isVisible()) return;
+    ctl.showMain();
+    record.openedAfterMs = Date.now() - started;
+    await heard(events, 'landed', 800);
+  } catch (err) {
+    record.error = err.message;
+    ctl.log(`unfold: ${err.message}`);
+    ctl.unfolding = null;
+    if (!ctl.quitting && !main.isDestroyed() && !main.isVisible()) ctl.showMain();
+  } finally {
+    ctl.unfolding = null;
+    // The bee is cleared away, and the layer is ready for the next X.
+    if (ctl.fold === layer && !layer.isDestroyed()) {
+      layer.webContents.send('fold:reset');
+      fitFoldLayer(ctl);
+    }
+    ctl.log(`unfold: ${JSON.stringify(record)}`);
   }
 }
 
@@ -968,6 +1084,7 @@ function createBubble(ctl) {
     backgroundColor: '#00000000',
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'bubble.js'),
+      partition: OVERLAYS,
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
@@ -1072,6 +1189,7 @@ function setSetting(ctl, key, value) {
   if (!SETTING_TYPES[key] || !SETTING_TYPES[key](value)) return false;
   ctl.settings.set(key, value);
   if (key === 'theme') nativeTheme.themeSource = value;
+  if (key === 'zoom') applyZoom(ctl);
   if (key === 'alwaysOnTop' && ctl.main && !ctl.main.isDestroyed()) ctl.main.setAlwaysOnTop(value);
   if (key === 'bubbleOnClose') {
     if (!value) releaseFold(ctl);
@@ -1139,7 +1257,7 @@ function setupIpc(ctl, env) {
     } else if (phase === 'up' && drag) {
       const wasClick = !drag.moved;
       drag = null;
-      if (wasClick) ctl.showMain();
+      if (wasClick) openFromBubble(ctl);
       else {
         const [x, y] = b.getPosition();
         ctl.settings.set('bubblePosition', { x, y });
@@ -1277,4 +1395,4 @@ async function runSelfTest(ctl, file) {
   finish();
 }
 
-module.exports = { start, collapse, showBubble, hideBubble, snapshotOf, connect, disconnect, setSetting, DEFAULT_PORT };
+module.exports = { start, collapse, openFromBubble, showBubble, hideBubble, snapshotOf, connect, disconnect, setSetting, DEFAULT_PORT };

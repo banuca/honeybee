@@ -175,5 +175,38 @@ function shrinkAway(p) {
 
 window.foldApi.onGo(() => {
   const moves = plan.counts ? beeHome(plan) : shrinkAway(plan);
-  Promise.all(moves.map((m) => m.finished)).then(() => window.foldApi.say('landed'));
+  // A reset cancels the animations, which rejects `finished`: nothing to say then.
+  Promise.all(moves.map((m) => m.finished)).then(() => window.foldApi.say('landed'), () => {});
+});
+
+// Back to empty, for the next time.
+window.foldApi.onReset(() => {
+  for (const a of document.getAnimations()) a.cancel();
+  bee.classList.remove('flying');
+  snapshot.classList.remove('ready');
+  if (snapshot.src.startsWith('blob:')) URL.revokeObjectURL(snapshot.src);
+  snapshot.removeAttribute('src');
+  plan = null;
+});
+
+// The other way: the bee pops out of the hive, flies to where the window
+// lives, and the window opens there as the bee arrives and fades into it.
+window.foldApi.onUnfold((p) => {
+  const T = p.ms;
+  const hive = centre(p.hive);
+  const home = centre(p.window);
+  bee.classList.add('flying');
+  beeArt.animate([
+    { opacity: 0, transform: 'scale(0.2)', offset: 0 },
+    { opacity: 1, transform: 'scale(1.15)', offset: 0.12 },
+    { opacity: 1, transform: 'scale(1)', offset: 0.18 },
+    { opacity: 1, transform: 'scale(1)', offset: 0.84 },
+    { opacity: 0, transform: 'scale(0.3)', offset: 1 }
+  ], { duration: T, fill: 'forwards' }).finished.then(() => window.foldApi.say('landed'), () => {});
+  bee.animate(flightFrames(flightPath(hive, home), home.x < hive.x), {
+    delay: T * 0.1,
+    duration: T * 0.72,
+    easing: 'cubic-bezier(0.35, 0, 0.25, 1)',
+    fill: 'both'
+  }).finished.then(() => window.foldApi.say('arrived'), () => {});
 });

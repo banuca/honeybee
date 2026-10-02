@@ -201,6 +201,12 @@ async function run() {
   honeybee.setSetting(ctl, 'view', 'usage');
   const usageText = await until(() => js(main, `(() => { const p = document.getElementById('providers'); return p && p.textContent.includes('77%') && p.textContent; })()`));
   check('the usage view shows what is left', usageText && usageText.includes('77%') && usageText.includes('39%') && usageText.includes('93%'), String(usageText));
+  ctl.usage.claude.observedAt = Date.now() - 40 * 60 * 1000;
+  honeybee.setSetting(ctl, 'view', 'usage');
+  const note = await until(() => js(main, `(() => { const n = document.querySelector('.provider-note'); return n && n.textContent; })()`));
+  check('an old claude reading says how to get a fresh one', note && note.includes('terminal'), String(note));
+  ctl.usage.claude.observedAt = Date.now();
+  honeybee.setSetting(ctl, 'view', 'usage');
   check('each window is a honeycomb of ten cells', (await js(main, 'document.querySelectorAll(".window").length')) === 4
     && (await js(main, 'document.querySelector(".comb").children.length')) === 10);
 
@@ -210,6 +216,24 @@ async function run() {
   check('wide: agents and usage side by side, no tabs', await js(main, `getComputedStyle(document.querySelector('.tabs')).display === 'none'
     && getComputedStyle(document.querySelector('.agents-panel')).display !== 'none'
     && getComputedStyle(document.querySelector('.usage-panel')).display !== 'none'`));
+  const bar = await js(main, `(() => { const d = document.getElementById('divider').getBoundingClientRect(); const c = document.querySelector('.content').getBoundingClientRect(); return { x: d.left, y: d.top + d.height / 2, left: c.left, width: c.width }; })()`);
+  const agentsWidth = () => js(main, `document.querySelector('.agents-panel').getBoundingClientRect().width`);
+  const agentsBefore = await agentsWidth();
+  const at = (x) => ({ x: Math.round(x), y: Math.round(bar.y) });
+  main.webContents.sendInputEvent({ type: 'mouseDown', button: 'left', clickCount: 1, ...at(bar.x) });
+  for (const dx of [-30, -60, -100]) {
+    main.webContents.sendInputEvent({ type: 'mouseMove', button: 'left', modifiers: ['leftButtonDown'], ...at(bar.x + dx) });
+    await wait(40);
+  }
+  main.webContents.sendInputEvent({ type: 'mouseUp', button: 'left', clickCount: 1, ...at(bar.x - 100) });
+  await wait(300);
+  const split = ctl.settings.get('split');
+  const agentsAfter = await agentsWidth();
+  check('the divider can be dragged, and its place is kept', split !== null && Math.abs(split - (bar.x - 100 - bar.left) / bar.width) < 0.03 && agentsAfter < agentsBefore - 60,
+    `split ${split}, agents panel ${agentsBefore} -> ${agentsAfter}`);
+  await js(main, `document.getElementById('divider').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`);
+  await wait(300);
+  check('a double-click puts the divider back', ctl.settings.get('split') === null && Math.abs((await agentsWidth()) - agentsBefore) < 2);
   if (screensDir) {
     await sampleSessions(port, token);
     for (const theme of ['dark', 'light']) {
@@ -243,6 +267,18 @@ async function run() {
   const darkBg = await js(main, 'getComputedStyle(document.body).backgroundColor');
   check('the dark theme applies', darkBg === 'rgb(21, 17, 14)', darkBg);
 
+  // Text size: the setting, and Ctrl + / Ctrl 0.
+  honeybee.setSetting(ctl, 'zoom', 1.2);
+  await wait(200);
+  check('a bigger text size zooms the window', Math.abs(main.webContents.getZoomFactor() - 1.2) < 0.001, String(main.webContents.getZoomFactor()));
+  for (const keyCode of ['=', '0']) {
+    main.webContents.sendInputEvent({ type: 'keyDown', keyCode, modifiers: ['control'] });
+    main.webContents.sendInputEvent({ type: 'keyUp', keyCode, modifiers: ['control'] });
+    await wait(200);
+    if (keyCode === '=') check('Ctrl + makes the text bigger', ctl.settings.get('zoom') === 1.3, String(ctl.settings.get('zoom')));
+  }
+  check('Ctrl 0 puts the text back to normal', ctl.settings.get('zoom') === 1 && Math.abs(main.webContents.getZoomFactor() - 1) < 0.001, String(ctl.settings.get('zoom')));
+
   // X folds the window into the bubble: animated on Windows and macOS,
   // straight away elsewhere.
   const folds = process.platform === 'win32' || process.platform === 'darwin';
@@ -257,7 +293,7 @@ async function run() {
     await until(() => !ctl.folding, 8000);
     const fold = ctl.lastFold || {};
     check('the window folded into the bubble, animated', fold.played && !fold.error && fold.handedOverAfterMs > 0, JSON.stringify(fold));
-    check('the fold layer is closed once the bubble has taken over', !ctl.fold);
+    check('the fold layer is emptied and parked once the bubble has taken over', Boolean(ctl.fold && !ctl.fold.isDestroyed() && ctl.fold.getBounds().width < 64 && ctl.fold.getBounds().height < 64), JSON.stringify(ctl.fold && ctl.fold.getBounds()));
     check('the window keeps its place for next time', JSON.stringify(main.getBounds()) === placeBefore);
   }
   if (bubble) {
@@ -265,6 +301,10 @@ async function run() {
     const bubbleState = await until(() => js(bubble, `document.getElementById('bubble').dataset.state === 'needs' && document.getElementById('count').textContent`));
     check('the bubble says one session needs you', bubbleState === (screensDir ? '2' : '1'), String(bubbleState));
     await capture(bubble, 'bubble-needs');
+    honeybee.setSetting(ctl, 'zoom', 1.3);
+    await wait(200);
+    check('the bubble keeps its size when the text is bigger', Math.abs(bubble.webContents.getZoomFactor() - 1) < 0.001, String(bubble.webContents.getZoomFactor()));
+    honeybee.setSetting(ctl, 'zoom', 1);
   }
 
   // Approve, finish: the bubble calms down.
@@ -290,9 +330,14 @@ async function run() {
     console.log('  skip  notifications are not supported on this machine');
   }
 
-  // Clicking the bubble brings the window back.
-  ctl.showMain();
-  await wait(300);
+  // Clicking the bubble brings the window back: the bee flies out of the hive.
+  honeybee.openFromBubble(ctl);
+  if (folds) {
+    await until(() => ctl.lastUnfold && !ctl.unfolding && main.isVisible(), 4000);
+    const unfold = ctl.lastUnfold || {};
+    check('the bee flies out of the hive and the window opens', unfold.played && !unfold.error && unfold.openedAfterMs > 0, JSON.stringify(unfold));
+  }
+  await until(() => main.isVisible() && (!ctl.bubble || ctl.bubble.isDestroyed()), 4000);
   check('the window comes back and the bubble goes', main.isVisible() && (!ctl.bubble || ctl.bubble.isDestroyed()));
 
   // Opening the window while it is still folding stops the fold.

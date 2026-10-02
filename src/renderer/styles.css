@@ -151,13 +151,27 @@ button { font: inherit; color: inherit; }
 }
 .panel-meta { color: var(--faint); font-weight: 400; margin-left: 6px; }
 
-/* Wide: both at once, no tabs. */
+/* Wide: both at once, no tabs, with a divider that can be dragged. Its
+   shares come from app.js; these are the defaults. */
+.divider { display: none; }
+
 @container app (min-width: 620px) {
   .tabs { display: none; }
-  .content { grid-template-columns: minmax(0, 1.45fr) minmax(250px, 1fr); }
+  .content { grid-template-columns: minmax(0, var(--agents-share, 1.45fr)) 0 minmax(250px, var(--usage-share, 1fr)); }
   .app[data-view] .agents-panel,
   .app[data-view] .usage-panel { display: block; }
-  .usage-panel { border-left: 1px solid var(--rule); }
+  .divider {
+    display: block;
+    position: relative;
+    z-index: 1;
+    border-left: 1px solid var(--rule);
+    cursor: col-resize;
+    outline: none;
+  }
+  /* A wider strip to grab than the line you see. */
+  .divider::before { content: ""; position: absolute; top: 0; bottom: 0; left: -4px; width: 8px; }
+  .divider:hover, .divider.is-dragging, .divider:focus-visible { border-left-color: var(--honey); }
+  .content.is-resizing { cursor: col-resize; user-select: none; }
 }
 
 /* ---- sessions ----------------------------------------------------------- */
@@ -335,11 +349,22 @@ button { font: inherit; color: inherit; }
 @container app (min-width: 420px) { .comb { gap: 3px; } }
 
 .provider .empty p { margin-bottom: 8px; }
+.provider-note { margin: 2px 0 0; color: var(--faint); font-size: 11px; max-width: 52ch; }
+
+/* Text size: minus, the size, plus. */
+.stepper { display: inline-flex; align-items: center; border: 1px solid var(--rule); border-radius: 5px; overflow: hidden; }
+.stepper button { border: 0; background: none; width: 26px; padding: 3px 0; color: var(--muted); cursor: pointer; }
+.stepper button:hover { color: var(--text); background: var(--surface-2); }
+.stepper button[disabled] { opacity: 0.4; cursor: default; background: none; }
+.stepper output { min-width: 5ch; padding: 0 6px; text-align: center; font-variant-numeric: tabular-nums; border-left: 1px solid var(--rule); border-right: 1px solid var(--rule); }
+.size-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.size-row .quiet { color: var(--faint); }
 
 /* ---- settings ------------------------------------------------------------- */
 
 .settings {
   position: absolute; inset: 0;
+  z-index: 2;
   overflow-y: auto;
   padding: 12px 14px 20px;
   background: var(--bg);
