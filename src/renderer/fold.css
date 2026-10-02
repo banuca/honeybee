@@ -1,0 +1,23 @@
+/* The fold layer: see-through everywhere but the snapshot and the stand-in.
+   Both move by transform and opacity only, which the compositor animates
+   without repainting. */
+
+.snapshot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: none;
+  transform-origin: 50% 50%;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  will-change: transform, opacity;
+}
+.snapshot.ready { display: block; }
+
+.standin {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 0;
+  cursor: default;
+  will-change: transform, opacity;
+}

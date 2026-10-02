@@ -7,7 +7,7 @@
 //   electron test/electron-smoke.js                 assertions only
 //   electron test/electron-smoke.js --screens DIR   also save screenshots
 
-const { app } = require('electron');
+const { app, Notification } = require('electron');
 const fs = require('fs');
 const http = require('http');
 const os = require('os');
@@ -16,6 +16,10 @@ const path = require('path');
 // A headless Linux runner has no GPU, and Chromium's page capture fails there
 // unless it renders in software from the start.
 if (process.platform === 'linux') app.disableHardwareAcceleration();
+
+// On someone's own desktop the test's notifications are only noise: with
+// HONEYBEE_SMOKE_QUIET they are built and counted but never shown.
+if (process.env.HONEYBEE_SMOKE_QUIET) Notification.prototype.show = function show() {};
 
 const screensAt = process.argv.indexOf('--screens');
 const screensDir = screensAt > 0 ? path.resolve(process.argv[screensAt + 1] || 'test-results/screenshots') : null;
@@ -239,12 +243,23 @@ async function run() {
   const darkBg = await js(main, 'getComputedStyle(document.body).backgroundColor');
   check('the dark theme applies', darkBg === 'rgb(21, 17, 14)', darkBg);
 
-  // X folds the window into the bubble.
+  // X folds the window into the bubble: animated on Windows and macOS,
+  // straight away elsewhere.
+  const folds = process.platform === 'win32' || process.platform === 'darwin';
+  if (folds) check('the fold is made ready while the window is open', Boolean(await until(() => ctl.foldLoaded, 8000)));
+  const placeBefore = JSON.stringify(main.getBounds());
   main.close();
-  await wait(200);
-  check('closing the window hides it instead of quitting', !main.isDestroyed() && !main.isVisible());
-  const bubble = await until(() => ctl.bubble && !ctl.bubble.isDestroyed() && ctl.bubble.isVisible() && ctl.bubble, 4000);
+  if (folds && screensDir) await captureFold();
+  check('closing the window hides it instead of quitting', Boolean(await until(() => !main.isDestroyed() && !main.isVisible(), 3000)));
+  const bubble = await until(() => ctl.bubble && !ctl.bubble.isDestroyed() && ctl.bubble.isVisible() && ctl.bubble, 8000);
   check('the bubble appears', Boolean(bubble));
+  if (folds) {
+    await until(() => !ctl.folding, 8000);
+    const fold = ctl.lastFold || {};
+    check('the window folded into the bubble, animated', fold.played && !fold.error && fold.handedOverAfterMs > 0, JSON.stringify(fold));
+    check('the fold layer is closed once the bubble has taken over', !ctl.fold);
+    check('the window keeps its place for next time', JSON.stringify(main.getBounds()) === placeBefore);
+  }
   if (bubble) {
     await until(() => !bubble.webContents.isLoading());
     const bubbleState = await until(() => js(bubble, `document.getElementById('bubble').dataset.state === 'needs' && document.getElementById('count').textContent`));
@@ -262,7 +277,6 @@ async function run() {
     check('the bubble shows work in progress', Boolean(working));
     await capture(bubble, 'bubble-working');
   }
-  const { Notification } = require('electron');
   const notifiedBefore = ctl.notified || 0;
   await post(port, token, '/claude/hook', { ...base, hook_event_name: 'Stop', last_assistant_message: 'Shipped.' });
   await until(() => honeybee.snapshotOf(ctl).agents.find((s) => s.key === 'claude:live-1').status === 'done');
@@ -281,6 +295,16 @@ async function run() {
   await wait(300);
   check('the window comes back and the bubble goes', main.isVisible() && (!ctl.bubble || ctl.bubble.isDestroyed()));
 
+  // Opening the window while it is still folding stops the fold.
+  if (folds && await until(() => ctl.foldLoaded, 8000)) {
+    honeybee.collapse(ctl);
+    await wait(40);
+    ctl.showMain();
+    await wait(500);
+    check('opening the window mid-fold stops the fold', main.isVisible() && !ctl.folding && (!ctl.bubble || ctl.bubble.isDestroyed()),
+      `visible ${main.isVisible()}, folding ${Boolean(ctl.folding)}, bubble ${Boolean(ctl.bubble)}`);
+  }
+
   // Disconnecting puts the user's files back.
   honeybee.disconnect(ctl, 'claude');
   honeybee.disconnect(ctl, 'codex');
@@ -289,6 +313,21 @@ async function run() {
     && after.hooks.PreToolUse[0].hooks[0].command === '~/guard.sh' && after.model === 'opus', JSON.stringify(after));
 
   check('state is saved to disk', ctl.state.saveNow() && fs.existsSync(path.join(root, 'userData', 'state.json')));
+}
+
+// Frames of the fold as it plays, for a person to look at.
+async function captureFold() {
+  await until(() => ctl.lastFold && ctl.lastFold.played, 3000);
+  const layer = ctl.fold;
+  for (let frame = 1; frame <= 4 && layer && !layer.isDestroyed(); frame += 1) {
+    try {
+      const image = await layer.webContents.capturePage();
+      fs.writeFileSync(path.join(screensDir, `fold-${frame}.png`), image.toPNG());
+    } catch (err) {
+      console.log(`  note  could not capture fold frame ${frame}: ${err.message}`);
+    }
+    await wait(60);
+  }
 }
 
 // Extra sessions so the screenshots show every state.

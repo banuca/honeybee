@@ -3,9 +3,11 @@
 // honeybee's main process: one small controller that owns the state, the
 // local server, the file watchers, the windows and the tray.
 
-const { app, BrowserWindow, Tray, Menu, Notification, dialog, ipcMain, nativeImage, nativeTheme, powerMonitor, screen, shell, session, net } = require('electron');
+const { app, BrowserWindow, Tray, Menu, Notification, dialog, ipcMain, nativeImage, nativeTheme, powerMonitor, screen, shell, session, net, systemPreferences } = require('electron');
 const crypto = require('crypto');
+const { EventEmitter } = require('events');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const paths = require('./paths');
@@ -80,6 +82,13 @@ function start({ argv = process.argv, env = process.env, test = null } = {}) {
     rollouts: null,
     main: null,
     bubble: null,
+    bubbleReady: null,
+    fold: null,
+    foldLoaded: false,
+    foldEvents: null,
+    foldTimer: null,
+    folding: null,
+    lastFold: null,
     tray: null,
     quitting: false,
     update: null,
@@ -141,11 +150,14 @@ function start({ argv = process.argv, env = process.env, test = null } = {}) {
 
   function showMain() {
     if (!ctl.settings) return;
+    cancelFold(ctl);
     if (!ctl.main || ctl.main.isDestroyed()) createMain(ctl, { show: true });
     else {
       if (ctl.main.isMinimized()) ctl.main.restore();
+      ctl.main.setOpacity(1);
       ctl.main.show();
       ctl.main.focus();
+      prepareFold(ctl);
     }
     hideBubble(ctl);
   }
@@ -576,6 +588,7 @@ function createMain(ctl, { show }) {
     if (show) {
       win.show();
       hideBubble(ctl);
+      prepareFold(ctl);
     }
   });
 
@@ -584,6 +597,7 @@ function createMain(ctl, { show }) {
     clearTimeout(boundsTimer);
     boundsTimer = setTimeout(() => {
       if (!win.isDestroyed() && !win.isMinimized()) ctl.settings.set('windowBounds', win.getBounds());
+      fitFoldLayer(ctl);
     }, 400);
   };
   win.on('move', rememberBounds);
@@ -603,8 +617,271 @@ function createMain(ctl, { show }) {
 }
 
 function collapse(ctl) {
-  if (ctl.main && !ctl.main.isDestroyed()) ctl.main.hide();
+  if (ctl.folding) return;
+  const main = ctl.main;
+  const onScreen = main && !main.isDestroyed() && main.isVisible() && !main.isMinimized();
+  if (onScreen && ctl.foldLoaded && foldPossible(ctl)) {
+    foldIntoBubble(ctl);
+    return;
+  }
+  releaseFold(ctl);
+  if (main && !main.isDestroyed()) main.hide();
   if (ctl.settings.get('bubbleOnClose')) showBubble(ctl);
+}
+
+// ---- folding into the bubble ------------------------------------------------
+
+// X shrinks the window into the bubble. A live window can't be animated
+// smoothly, so a snapshot of it is, on a see-through layer above everything.
+// Opening a window takes a moment (most of a second on a busy machine), so
+// the layer is made while the window is open, and closed again once the
+// bubble has taken over. It waits on screen, empty, already covering the
+// way from the window to the bubble: Windows fades a window in as it is
+// shown, and takes a moment to redraw one it has resized, and either would
+// leave a gap between the window going and the snapshot appearing.
+//
+// Windows and macOS only for now: on Linux (Wayland) an app can't place its
+// windows, and without a compositor the layer would show as a black box.
+const FOLD_MS = 380;
+const FOLD_PAD = 24;
+const FOLD_STAGES = ['shown', 'late', 'landed'];
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function foldPossible(ctl) {
+  if (process.platform !== 'win32' && process.platform !== 'darwin') return false;
+  if (!ctl.settings.get('bubbleOnClose')) return false;
+  try { return !systemPreferences.getAnimationSettings().prefersReducedMotion; } catch (_) { return true; }
+}
+
+function prepareFold(ctl) {
+  clearTimeout(ctl.foldTimer);
+  if (!foldPossible(ctl) || (ctl.fold && !ctl.fold.isDestroyed())) return;
+  // After the window's own first paint, so the two don't compete.
+  ctl.foldTimer = setTimeout(() => {
+    const main = ctl.main;
+    if (!main || main.isDestroyed() || !main.isVisible() || (ctl.fold && !ctl.fold.isDestroyed())) return;
+    createFoldLayer(ctl);
+  }, 1000);
+}
+
+// Where the fold would play now: from the window to the bubble, or, with the
+// bubble on another screen and out of reach, into the window's own centre.
+function foldPlan(ctl) {
+  const from = ctl.main.getBounds();
+  const display = screen.getDisplayMatching(from);
+  const bubbleAt = bubbleBounds(ctl);
+  const together = screen.getDisplayMatching(bubbleAt).id === display.id;
+  const to = together ? bubbleAt : {
+    x: Math.round(from.x + (from.width - BUBBLE_SIZE) / 2),
+    y: Math.round(from.y + (from.height - BUBBLE_SIZE) / 2),
+    width: BUBBLE_SIZE,
+    height: BUBBLE_SIZE
+  };
+  return { from, to, display, together, region: foldRegion(from, to, display.bounds) };
+}
+
+function sameBounds(a, b) {
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+}
+
+// The window moved or was resized: the layer follows, while it is empty.
+function fitFoldLayer(ctl) {
+  const layer = ctl.fold;
+  if (!layer || layer.isDestroyed() || !ctl.foldLoaded || ctl.folding) return;
+  if (!ctl.main || ctl.main.isDestroyed()) return;
+  const { region } = foldPlan(ctl);
+  if (!sameBounds(layer.getBounds(), region)) layer.setBounds(region);
+}
+
+function createFoldLayer(ctl) {
+  const win = new BrowserWindow({
+    width: BUBBLE_SIZE,
+    height: BUBBLE_SIZE,
+    show: false,
+    // A tool window: never listed in Alt+Tab or the taskbar.
+    type: process.platform === 'win32' ? 'toolbar' : undefined,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    focusable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    hasShadow: false,
+    title: 'honeybee',
+    backgroundColor: '#00000000',
+    webPreferences: {
+      preload: path.join(__dirname, '..', 'preload', 'fold.js'),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      spellcheck: false
+    }
+  });
+  const events = new EventEmitter();
+  win.setIgnoreMouseEvents(true);
+  win.setAlwaysOnTop(true, 'pop-up-menu');
+  win.webContents.ipc.on('fold', (_event, what) => {
+    if (FOLD_STAGES.includes(what)) events.emit(what);
+  });
+  win.webContents.once('did-finish-load', () => {
+    if (ctl.fold !== win || !ctl.main || ctl.main.isDestroyed()) return;
+    win.setBounds(foldPlan(ctl).region);
+    win.showInactive();
+    ctl.foldLoaded = true;
+  });
+  win.on('closed', () => {
+    if (ctl.fold === win) {
+      ctl.fold = null;
+      ctl.foldLoaded = false;
+    }
+  });
+  ctl.fold = win;
+  ctl.foldEvents = events;
+  ctl.foldLoaded = false;
+  win.loadFile(path.join(RENDERER, 'fold.html'));
+}
+
+function releaseFold(ctl) {
+  clearTimeout(ctl.foldTimer);
+  const layer = ctl.fold;
+  ctl.fold = null;
+  ctl.foldLoaded = false;
+  if (layer && !layer.isDestroyed()) layer.destroy();
+}
+
+function cancelFold(ctl) {
+  if (!ctl.folding) return;
+  ctl.folding.cancelled = true;
+  ctl.folding = null;
+  releaseFold(ctl);
+}
+
+// True when the layer reports `name`, false if it hasn't within `ms`.
+function heard(events, name, ms) {
+  return new Promise((resolve) => {
+    const done = (ok) => {
+      clearTimeout(timer);
+      events.removeListener(name, onEvent);
+      resolve(ok);
+    };
+    const onEvent = () => done(true);
+    const timer = setTimeout(() => done(false), ms);
+    events.once(name, onEvent);
+  });
+}
+
+// Where the fold plays: the window, the bubble and a margin, on one screen.
+function foldRegion(from, to, area) {
+  const x = Math.max(area.x, Math.min(from.x, to.x) - FOLD_PAD);
+  const y = Math.max(area.y, Math.min(from.y, to.y) - FOLD_PAD);
+  const right = Math.min(area.x + area.width, Math.max(from.x + from.width, to.x + to.width) + FOLD_PAD);
+  const bottom = Math.min(area.y + area.height, Math.max(from.y + from.height, to.y + to.height) + FOLD_PAD);
+  return { x, y, width: right - x, height: bottom - y };
+}
+
+// A rectangle's place inside the region, in whole device pixels, so the
+// snapshot covers the window exactly and the stand-in lands on the bubble.
+function placeWithin(rect, region, scale) {
+  let x = rect.x - region.x;
+  let y = rect.y - region.y;
+  if (process.platform === 'win32') {
+    const a = screen.dipToScreenPoint({ x: rect.x, y: rect.y });
+    const b = screen.dipToScreenPoint({ x: region.x, y: region.y });
+    x = (a.x - b.x) / scale;
+    y = (a.y - b.y) / scale;
+  }
+  return { x, y, width: rect.width, height: rect.height };
+}
+
+// The rounded corners the system gives the window, copied by the snapshot.
+function windowCornerRadius() {
+  if (process.platform === 'darwin') return 10;
+  if (process.platform === 'win32' && Number(os.release().split('.')[2]) >= 22000) return 8;
+  return 0;
+}
+
+// The window is swapped for its snapshot before anything moves, and the
+// stand-in hexagon for the real bubble after it lands, so nothing flickers.
+async function foldIntoBubble(ctl) {
+  const main = ctl.main;
+  const layer = ctl.fold;
+  const events = ctl.foldEvents;
+  const run = { cancelled: false };
+  const started = Date.now();
+  const record = { played: false, presented: null, startedAfterMs: null, handedOverAfterMs: null, error: null };
+  ctl.folding = run;
+  ctl.lastFold = record;
+  const going = () => !run.cancelled && !ctl.quitting;
+  const live = () => going() && !layer.isDestroyed() && !main.isDestroyed();
+  try {
+    const { from, to, display, together, region } = foldPlan(ctl);
+    showBubble(ctl, { hidden: true });
+    const image = await main.webContents.capturePage();
+    if (!live() || image.isEmpty()) throw new Error('no snapshot of the window');
+    // Moved a moment ago: the layer catches up, and gets time to redraw.
+    if (!sameBounds(layer.getBounds(), region)) {
+      layer.setBounds(region);
+      await wait(250);
+      if (!live()) throw new Error('stopped');
+    }
+    layer.moveTop();
+    let late = false;
+    const noteLate = () => { late = true; };
+    events.once('late', noteLate);
+    layer.webContents.send('fold:play', {
+      image: image.toDataURL(),
+      from: placeWithin(from, region, display.scaleFactor),
+      to: placeWithin(to, region, display.scaleFactor),
+      counts: together ? ctl.agents.counts() : null,
+      radius: windowCornerRadius(),
+      ms: FOLD_MS
+    });
+    // The layer says when the snapshot is on screen, over the window.
+    const shown = await heard(events, 'shown', 1500);
+    events.removeListener('late', noteLate);
+    if (!shown || !live()) throw new Error('the snapshot did not appear');
+    record.presented = !late;
+    // Windows would fade the window out where it stands, behind the moving
+    // snapshot. Made transparent first, it simply goes.
+    main.setOpacity(0);
+    main.hide();
+    layer.webContents.send('fold:go');
+    record.played = true;
+    record.startedAfterMs = Date.now() - started;
+    await heard(events, 'landed', FOLD_MS + 600);
+    if (!going()) return;
+    // The stand-in covers the wait for the real bubble to load.
+    await Promise.race([ctl.bubbleReady, wait(5000)]);
+    if (!going()) return;
+    const bubble = ctl.bubble;
+    if (bubble && !bubble.isDestroyed()) {
+      bubble.moveTop();
+      bubble.showInactive();
+    } else {
+      showBubble(ctl);
+    }
+    await wait(250);
+    record.handedOverAfterMs = Date.now() - started;
+  } catch (err) {
+    record.error = err.message;
+    ctl.log(`fold: ${err.message}`);
+    // Whatever went wrong, end where X always ends.
+    if (!run.cancelled && !ctl.quitting) {
+      if (!main.isDestroyed()) main.hide();
+      showBubble(ctl);
+    }
+  } finally {
+    if (!run.cancelled) {
+      ctl.folding = null;
+      releaseFold(ctl);
+    }
+    ctl.log(`fold: ${JSON.stringify(record)}`);
+  }
 }
 
 // ---- bubble -----------------------------------------------------------------
@@ -614,14 +891,27 @@ function defaultBubblePosition() {
   return { x: area.x + area.width - BUBBLE_SIZE - 24, y: area.y + area.height - BUBBLE_SIZE - 24 };
 }
 
-function showBubble(ctl) {
-  if (ctl.bubble && !ctl.bubble.isDestroyed()) {
-    ctl.bubble.showInactive();
-    return;
-  }
+function bubbleBounds(ctl) {
   const saved = ctl.settings.get('bubblePosition') || defaultBubblePosition();
   const fitted = fitBoundsToDisplays({ ...saved, width: BUBBLE_SIZE, height: BUBBLE_SIZE }, screen.getAllDisplays());
-  const pos = fitted.bounds || { ...defaultBubblePosition(), width: BUBBLE_SIZE, height: BUBBLE_SIZE };
+  return fitted.bounds || { ...defaultBubblePosition(), width: BUBBLE_SIZE, height: BUBBLE_SIZE };
+}
+
+// Shows the bubble as soon as it has loaded. `hidden` only loads it, for the
+// fold to reveal when it lands.
+function showBubble(ctl, { hidden = false } = {}) {
+  let win = ctl.bubble;
+  if (!win || win.isDestroyed()) win = createBubble(ctl);
+  if (!hidden) {
+    ctl.bubbleReady.then(() => {
+      if (ctl.bubble === win && !win.isDestroyed()) win.showInactive();
+    });
+  }
+  return win;
+}
+
+function createBubble(ctl) {
+  const pos = bubbleBounds(ctl);
   const win = new BrowserWindow({
     x: pos.x, y: pos.y, width: BUBBLE_SIZE, height: BUBBLE_SIZE,
     frame: false,
@@ -648,15 +938,17 @@ function showBubble(ctl) {
   ctl.bubble = win;
   win.setAlwaysOnTop(true, 'floating');
   if (process.platform === 'darwin') win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  win.loadFile(path.join(RENDERER, 'bubble.html'));
-  win.once('ready-to-show', () => win.showInactive());
-  // Without a GPU (some Linux setups) the first paint can be slow to report;
-  // the bubble must appear regardless, or there is no way back to the window.
-  win.webContents.once('did-finish-load', () => {
-    setTimeout(() => { if (!win.isDestroyed() && !win.isVisible()) win.showInactive(); }, 1200);
+  // Ready at its first paint. Without a GPU (some Linux setups) that can be
+  // slow to report, and the bubble must appear regardless, or there is no way
+  // back to the window.
+  ctl.bubbleReady = new Promise((resolve) => {
+    win.once('ready-to-show', resolve);
+    win.webContents.once('did-finish-load', () => setTimeout(resolve, 1200));
   });
+  win.loadFile(path.join(RENDERER, 'bubble.html'));
   win.webContents.on('did-finish-load', () => push(ctl));
   win.on('closed', () => { if (ctl.bubble === win) ctl.bubble = null; });
+  return win;
 }
 
 function hideBubble(ctl) {
@@ -742,6 +1034,10 @@ function setSetting(ctl, key, value) {
   ctl.settings.set(key, value);
   if (key === 'theme') nativeTheme.themeSource = value;
   if (key === 'alwaysOnTop' && ctl.main && !ctl.main.isDestroyed()) ctl.main.setAlwaysOnTop(value);
+  if (key === 'bubbleOnClose') {
+    if (!value) releaseFold(ctl);
+    else if (ctl.main && !ctl.main.isDestroyed() && ctl.main.isVisible()) prepareFold(ctl);
+  }
   if (key === 'launchAtLogin') {
     try { autostart.setLaunchAtLogin(app, value); } catch (err) { ctl.log(`autostart: ${err.message}`); }
   }
@@ -922,12 +1218,17 @@ async function runSelfTest(ctl, file) {
       const res = await net.fetch(`http://127.0.0.1:${ctl.server.port}/health`, { headers: { 'X-Honeybee': ctl.settings.get('token') } });
       result.steps.health = res.status;
     }
+    // Where the fold animates, give it the moment it needs to get ready.
+    for (let waited = 0; waited < 8000 && !ctl.foldLoaded && foldPossible(ctl); waited += 250) {
+      await new Promise((r) => setTimeout(r, 250));
+    }
     collapse(ctl);
     const bubbleShown = () => Boolean(ctl.bubble && !ctl.bubble.isDestroyed() && ctl.bubble.isVisible());
-    for (let waited = 0; waited < 10000 && !bubbleShown(); waited += 250) {
+    for (let waited = 0; waited < 10000 && (!bubbleShown() || ctl.folding); waited += 250) {
       await new Promise((r) => setTimeout(r, 250));
     }
     result.steps.bubble = bubbleShown();
+    result.steps.fold = ctl.lastFold;
     result.steps.tray = Boolean(ctl.tray);
     result.ok = Boolean(result.steps.rendered && result.steps.health === 200 && result.steps.bubble);
   } catch (err) {

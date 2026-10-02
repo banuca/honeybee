@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src data:; base-uri 'none'; form-action 'none'">
+  <title>honeybee</title>
+  <link rel="stylesheet" href="bubble.css">
+  <link rel="stylesheet" href="fold.css">
+</head>
+<body>
+  <img class="snapshot" id="snapshot" alt="" elementtiming="snapshot">
+  <!-- The same hexagon as bubble.html, standing in until the real bubble has
+       loaded. The 0 is there so its font is loaded before the fold plays. -->
+  <div class="bubble standin" id="standin" data-state="idle" aria-hidden="true">
+    <svg class="hex" viewBox="0 0 64 64">
+      <path class="hex-body" d="M32 9 51.9 20.5v23L32 55 12.1 43.5v-23Z"/>
+      <path class="hex-ring" d="M32 5 55.4 18.5v27L32 59 8.6 45.5v-27Z"/>
+      <path class="hex-stripes" d="M12.1 28.4h39.8M12.1 35.6h39.8"/>
+    </svg>
+    <span class="count" id="count">0</span>
+  </div>
+  <script src="fold.js"></script>
+</body>
+</html>
