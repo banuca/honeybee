@@ -76,9 +76,16 @@ function trayTemplate(size) {
   </svg>`;
 }
 
+// Windows won't make a window as small as a 16px icon, so the page is drawn
+// in one at least this big and the icon is cut out of its corner at its
+// true size. (Shrinking the whole frame instead left small icons drawn at
+// half size in a corner.)
+const CANVAS = 256;
+
 async function render(svg, size, out) {
+  const box = Math.max(size, CANVAS);
   const win = new BrowserWindow({
-    width: size, height: size, show: false, frame: false, transparent: true,
+    width: box, height: box, show: false, frame: false, transparent: true,
     useContentSize: true,
     webPreferences: { offscreen: true }
   });
@@ -95,9 +102,10 @@ async function render(svg, size, out) {
   win.webContents.invalidate();
   await new Promise((r) => setTimeout(r, 200));
   if (!latest) throw new Error(`no frame for ${out}`);
-  const image = latest;
-  const { width } = image.getSize();
-  const png = (width === size ? image : image.resize({ width: size, height: size, quality: 'best' })).toPNG();
+  const icon = latest.crop({ x: 0, y: 0, width: size, height: size });
+  const got = icon.getSize();
+  if (got.width !== size || got.height !== size) throw new Error(`${out} came out ${got.width}x${got.height}, not ${size}px`);
+  const png = icon.toPNG();
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, png);
   win.destroy();
@@ -115,9 +123,12 @@ app.whenReady().then(async () => {
     await render(appIcon(s, Math.round(s * 0.03)), s, path.join(ROOT, 'build', 'icons', `${s}x${s}.png`));
   }
   await render(appIcon(512, 16), 512, path.join(ROOT, 'assets', 'icon.png'));
+  // Windows picks the tray size by the screen's scaling: 16px at 100%,
+  // 20 at 125%, 24 at 150%, 32 at 200%.
   for (const state of ['idle', 'working', 'needs']) {
-    await render(trayIcon(16, state), 16, path.join(ROOT, 'assets', 'tray', `tray-${state}.png`));
-    await render(trayIcon(32, state), 32, path.join(ROOT, 'assets', 'tray', `tray-${state}@2x.png`));
+    for (const [size, suffix] of [[16, ''], [20, '@1.25x'], [24, '@1.5x'], [32, '@2x']]) {
+      await render(trayIcon(size, state), size, path.join(ROOT, 'assets', 'tray', `tray-${state}${suffix}.png`));
+    }
   }
   await render(trayTemplate(16), 16, path.join(ROOT, 'assets', 'tray', 'trayTemplate.png'));
   await render(trayTemplate(32), 32, path.join(ROOT, 'assets', 'tray', 'trayTemplate@2x.png'));
