@@ -7,7 +7,7 @@
 //   electron test/electron-smoke.js                 assertions only
 //   electron test/electron-smoke.js --screens DIR   also save screenshots
 
-const { app, Notification } = require('electron');
+const { app, Notification, systemPreferences } = require('electron');
 const fs = require('fs');
 const http = require('http');
 const os = require('os');
@@ -280,8 +280,11 @@ async function run() {
   check('Ctrl 0 puts the text back to normal', ctl.settings.get('zoom') === 1 && Math.abs(main.webContents.getZoomFactor() - 1) < 0.001, String(ctl.settings.get('zoom')));
 
   // X folds the window into the bubble: animated on Windows and macOS,
-  // straight away elsewhere.
-  const folds = process.platform === 'win32' || process.platform === 'darwin';
+  // straight away elsewhere, and wherever the system asks for less motion
+  // (as CI machines often do).
+  const motion = systemPreferences.getAnimationSettings();
+  const folds = (process.platform === 'win32' || process.platform === 'darwin') && !motion.prefersReducedMotion;
+  if (!folds) console.log(`  skip  the fold animation: ${process.platform}, reduced motion ${motion.prefersReducedMotion}`);
   if (folds) check('the fold is made ready while the window is open', Boolean(await until(() => ctl.foldLoaded, 8000)));
   const placeBefore = JSON.stringify(main.getBounds());
   main.close();
