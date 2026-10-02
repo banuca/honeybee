@@ -21,3 +21,33 @@
   cursor: default;
   will-change: transform, opacity;
 }
+
+/* The bee: the outer box follows the flight path, the drawing inside it
+   grows in and dives out, and the wings flutter while it flies. */
+.bee {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 34px;
+  height: 34px;
+  will-change: transform;
+}
+.bee-art {
+  display: block;
+  width: 34px;
+  height: 34px;
+  overflow: visible;
+  opacity: 0;
+  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.4));
+  will-change: transform, opacity;
+}
+.bee-wing { fill: rgba(242, 235, 227, 0.72); stroke: rgba(21, 17, 14, 0.55); stroke-width: 0.8; }
+.bee-sting { fill: #15110e; }
+.bee-body { fill: #f0a92e; stroke: #15110e; stroke-width: 1.1; }
+.bee-stripe { fill: #15110e; }
+.bee-head { fill: #2a211b; stroke: rgba(242, 235, 227, 0.55); stroke-width: 0.9; }
+.bee-eye { fill: #f2ebe3; }
+
+.bee-wings { transform-box: view-box; transform-origin: 14px 13px; }
+.bee.flying .bee-wings { animation: flutter 50ms linear infinite alternate; }
+@keyframes flutter { to { transform: scaleY(0.35); } }

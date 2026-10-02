@@ -87,6 +87,7 @@ function start({ argv = process.argv, env = process.env, test = null } = {}) {
     foldLoaded: false,
     foldEvents: null,
     foldTimer: null,
+    foldPlaced: null,
     folding: null,
     lastFold: null,
     tray: null,
@@ -631,9 +632,9 @@ function collapse(ctl) {
 
 // ---- folding into the bubble ------------------------------------------------
 
-// X shrinks the window into the bubble. A live window can't be animated
-// smoothly, so a snapshot of it is, on a see-through layer above everything.
-// Opening a window takes a moment (most of a second on a busy machine), so
+// X turns the window into a bee that flies home to the bubble. A live window
+// can't be animated smoothly, so a snapshot of it is, on a see-through layer
+// above everything. Opening a window takes a moment (most of a second on a busy machine), so
 // the layer is made while the window is open, and closed again once the
 // bubble has taken over. It waits on screen, empty, already covering the
 // way from the window to the bubble: Windows fades a window in as it is
@@ -642,7 +643,7 @@ function collapse(ctl) {
 //
 // Windows and macOS only for now: on Linux (Wayland) an app can't place its
 // windows, and without a compositor the layer would show as a black box.
-const FOLD_MS = 380;
+const FOLD_MS = 920;
 const FOLD_PAD = 24;
 const FOLD_STAGES = ['shown', 'late', 'landed'];
 
@@ -682,7 +683,17 @@ function foldPlan(ctl) {
 }
 
 function sameBounds(a, b) {
-  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+  return Boolean(a && b) && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+}
+
+// Places the layer over `region`, remembering what was asked for: on a
+// scaled screen Windows rounds the bounds it reports back, so comparing
+// with those would find the layer out of place every time.
+function placeFoldLayer(ctl, region) {
+  if (sameBounds(ctl.foldPlaced, region)) return false;
+  ctl.fold.setBounds(region);
+  ctl.foldPlaced = region;
+  return true;
 }
 
 // The window moved or was resized: the layer follows, while it is empty.
@@ -690,8 +701,7 @@ function fitFoldLayer(ctl) {
   const layer = ctl.fold;
   if (!layer || layer.isDestroyed() || !ctl.foldLoaded || ctl.folding) return;
   if (!ctl.main || ctl.main.isDestroyed()) return;
-  const { region } = foldPlan(ctl);
-  if (!sameBounds(layer.getBounds(), region)) layer.setBounds(region);
+  placeFoldLayer(ctl, foldPlan(ctl).region);
 }
 
 function createFoldLayer(ctl) {
@@ -730,7 +740,8 @@ function createFoldLayer(ctl) {
   });
   win.webContents.once('did-finish-load', () => {
     if (ctl.fold !== win || !ctl.main || ctl.main.isDestroyed()) return;
-    win.setBounds(foldPlan(ctl).region);
+    ctl.foldPlaced = null;
+    placeFoldLayer(ctl, foldPlan(ctl).region);
     win.showInactive();
     ctl.foldLoaded = true;
   });
@@ -798,6 +809,27 @@ function placeWithin(rect, region, scale) {
   return { x, y, width: rect.width, height: rect.height };
 }
 
+// The snapshot as an uncompressed BMP, at the screen's full resolution.
+// Building one is a copy; a PNG takes most of a third of a second to
+// compress for a large window, and the window can't fold until it's done.
+function snapshotBmp(image) {
+  const scale = Math.max(1, ...image.getScaleFactors());
+  const { width, height } = image.getSize(scale);
+  const pixels = image.toBitmap({ scaleFactor: scale }); // BGRA, top row first
+  if (pixels.length !== width * height * 4) return null;
+  const header = Buffer.alloc(54);
+  header.write('BM', 0, 'ascii');
+  header.writeUInt32LE(54 + pixels.length, 2);
+  header.writeUInt32LE(54, 10);
+  header.writeUInt32LE(40, 14);
+  header.writeInt32LE(width, 18);
+  header.writeInt32LE(-height, 22); // negative: rows run top to bottom
+  header.writeUInt16LE(1, 26);
+  header.writeUInt16LE(32, 28);
+  header.writeUInt32LE(pixels.length, 34);
+  return Buffer.concat([header, pixels]);
+}
+
 // The rounded corners the system gives the window, copied by the snapshot.
 function windowCornerRadius() {
   if (process.platform === 'darwin') return 10;
@@ -822,10 +854,10 @@ async function foldIntoBubble(ctl) {
     const { from, to, display, together, region } = foldPlan(ctl);
     showBubble(ctl, { hidden: true });
     const image = await main.webContents.capturePage();
+    record.capturedAfterMs = Date.now() - started;
     if (!live() || image.isEmpty()) throw new Error('no snapshot of the window');
     // Moved a moment ago: the layer catches up, and gets time to redraw.
-    if (!sameBounds(layer.getBounds(), region)) {
-      layer.setBounds(region);
+    if (placeFoldLayer(ctl, region)) {
       await wait(250);
       if (!live()) throw new Error('stopped');
     }
@@ -833,8 +865,10 @@ async function foldIntoBubble(ctl) {
     let late = false;
     const noteLate = () => { late = true; };
     events.once('late', noteLate);
+    const encoded = snapshotBmp(image) || image.toDataURL();
+    record.encodedAfterMs = Date.now() - started;
     layer.webContents.send('fold:play', {
-      image: image.toDataURL(),
+      image: encoded,
       from: placeWithin(from, region, display.scaleFactor),
       to: placeWithin(to, region, display.scaleFactor),
       counts: together ? ctl.agents.counts() : null,
@@ -843,6 +877,7 @@ async function foldIntoBubble(ctl) {
     });
     // The layer says when the snapshot is on screen, over the window.
     const shown = await heard(events, 'shown', 1500);
+    record.shownAfterMs = Date.now() - started;
     events.removeListener('late', noteLate);
     if (!shown || !live()) throw new Error('the snapshot did not appear');
     record.presented = !late;
@@ -886,15 +921,19 @@ async function foldIntoBubble(ctl) {
 
 // ---- bubble -----------------------------------------------------------------
 
-function defaultBubblePosition() {
-  const area = screen.getPrimaryDisplay().workArea;
+// Until the bubble is dragged somewhere, it sits in the bottom corner of the
+// screen the window is on, so the bee never has to cross between screens.
+function defaultBubblePosition(ctl) {
+  const main = ctl.main && !ctl.main.isDestroyed() ? ctl.main.getBounds() : ctl.settings.get('windowBounds');
+  const display = main && Number.isFinite(main.width) ? screen.getDisplayMatching(main) : screen.getPrimaryDisplay();
+  const area = display.workArea;
   return { x: area.x + area.width - BUBBLE_SIZE - 24, y: area.y + area.height - BUBBLE_SIZE - 24 };
 }
 
 function bubbleBounds(ctl) {
-  const saved = ctl.settings.get('bubblePosition') || defaultBubblePosition();
+  const saved = ctl.settings.get('bubblePosition') || defaultBubblePosition(ctl);
   const fitted = fitBoundsToDisplays({ ...saved, width: BUBBLE_SIZE, height: BUBBLE_SIZE }, screen.getAllDisplays());
-  return fitted.bounds || { ...defaultBubblePosition(), width: BUBBLE_SIZE, height: BUBBLE_SIZE };
+  return fitted.bounds || { ...defaultBubblePosition(ctl), width: BUBBLE_SIZE, height: BUBBLE_SIZE };
 }
 
 // Shows the bubble as soon as it has loaded. `hidden` only loads it, for the

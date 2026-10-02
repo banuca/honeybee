@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src data:; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src data: blob:; base-uri 'none'; form-action 'none'">
   <title>honeybee</title>
   <link rel="stylesheet" href="bubble.css">
   <link rel="stylesheet" href="fold.css">
@@ -18,6 +18,25 @@
       <path class="hex-stripes" d="M12.1 28.4h39.8M12.1 35.6h39.8"/>
     </svg>
     <span class="count" id="count">0</span>
+  </div>
+  <!-- The bee the window turns into, on its way to the hive. It faces right;
+       fold.js turns it to face where it is flying. -->
+  <div class="bee" id="bee" aria-hidden="true">
+    <svg class="bee-art" id="bee-art" viewBox="0 0 32 32">
+      <g class="bee-wings">
+        <ellipse class="bee-wing" cx="11.5" cy="8.5" rx="4.2" ry="6.4" transform="rotate(-28 11.5 8.5)"/>
+        <ellipse class="bee-wing" cx="16" cy="8" rx="4.2" ry="6.6" transform="rotate(18 16 8)"/>
+      </g>
+      <path class="bee-sting" d="M4.2 18.5 1.6 19.6 4.4 20.6Z"/>
+      <ellipse class="bee-body" cx="13" cy="19.5" rx="9" ry="6.4"/>
+      <clipPath id="bee-clip"><ellipse cx="13" cy="19.5" rx="8.4" ry="5.8"/></clipPath>
+      <g clip-path="url(#bee-clip)">
+        <rect class="bee-stripe" x="9.2" y="12" width="2.6" height="15"/>
+        <rect class="bee-stripe" x="14.2" y="12" width="2.6" height="15"/>
+      </g>
+      <circle class="bee-head" cx="24.2" cy="18" r="4.4"/>
+      <circle class="bee-eye" cx="25.6" cy="16.9" r="1.1"/>
+    </svg>
   </div>
   <script src="fold.js"></script>
 </body>

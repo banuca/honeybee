@@ -319,14 +319,14 @@ async function run() {
 async function captureFold() {
   await until(() => ctl.lastFold && ctl.lastFold.played, 3000);
   const layer = ctl.fold;
-  for (let frame = 1; frame <= 4 && layer && !layer.isDestroyed(); frame += 1) {
+  for (let frame = 1; frame <= 8 && layer && !layer.isDestroyed(); frame += 1) {
     try {
       const image = await layer.webContents.capturePage();
       fs.writeFileSync(path.join(screensDir, `fold-${frame}.png`), image.toPNG());
     } catch (err) {
       console.log(`  note  could not capture fold frame ${frame}: ${err.message}`);
     }
-    await wait(60);
+    await wait(90);
   }
 }
 
