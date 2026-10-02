@@ -51,7 +51,11 @@ const EXTERNAL_ALLOWED = [
 function start({ argv = process.argv, env = process.env, test = null } = {}) {
   if (env.HONEYBEE_USER_DATA) app.setPath('userData', env.HONEYBEE_USER_DATA);
   app.setName('honeybee');
-  if (process.platform === 'win32') app.setAppUserModelId(APP_ID);
+  // Windows names a notification after the Start Menu shortcut carrying this
+  // ID, and Electron creates one itself the first time it notifies. A run from
+  // source would leave an "Electron" shortcut that takes over the installed
+  // app's notifications, so only the packaged app uses the real ID.
+  if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? APP_ID : `${APP_ID}.dev`);
 
   if (!app.requestSingleInstanceLock()) {
     app.quit();
