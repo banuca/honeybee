@@ -1,0 +1,4 @@
+/* The real honeybee window inside the promo video: held still, so each frame
+   shows exactly what the stage set up for it. */
+
+*, *::before, *::after { transition: none !important; animation: none !important; }

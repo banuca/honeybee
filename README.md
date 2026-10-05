@@ -2,7 +2,10 @@
 
 A small desktop widget for people who run coding agents. It shows what each **Claude Code** and **Codex** session is doing, tells you the moment one finishes or needs you, and shows how much of your usage limits is left.
 
-![honeybee, wide, dark theme](docs/screenshot-dark.png)
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="docs/screenshot-dark.png">
+  <img src="docs/honeybee.webp" alt="honeybee in action: Claude Code and Codex sessions arrive and one needs you, the honeycomb meters drain, and closing the window turns it into a bee that flies home to the hive">
+</picture>
 
 - **Agents**: every session with its state (working, needs you, done, stopped, failed), with what it's waiting for: *approve a command*, *answer a question*, *review the plan*.
 - **Alerts**: a desktop notification the moment a session needs you or finishes.
@@ -79,6 +82,7 @@ npm start              # run it
 npm test               # unit tests
 npm run test:electron  # end-to-end test in a real Electron window
 npm run build:win      # or build:mac / build:linux
+npm run promo          # re-render the animation at the top of this page (needs ffmpeg)
 ```
 
 `npm run icons` regenerates every icon from the SVGs in `scripts/make-icons.js`.

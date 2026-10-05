@@ -1,0 +1,171 @@
+/* The promo video's stage: 1280×720, laid out once here; stage.js moves
+   things with transform and opacity on every frame. Colours are honeybee's
+   dark palette (src/renderer/styles.css). */
+
+@font-face { font-family: "Plex Mono"; src: url("/src/renderer/fonts/ibm-plex-mono-400.woff2") format("woff2"); font-weight: 400; font-display: block; }
+@font-face { font-family: "Plex Mono"; src: url("/src/renderer/fonts/ibm-plex-mono-500.woff2") format("woff2"); font-weight: 500; font-display: block; }
+@font-face { font-family: "Plex Mono"; src: url("/src/renderer/fonts/ibm-plex-mono-600.woff2") format("woff2"); font-weight: 600; font-display: block; }
+
+:root {
+  --deep: #0d0a08;
+  --text: #f2ebe3;
+  --muted: #a3978c;
+  --faint: #6b6058;
+  --honey: #f0a92e;
+  --ink: #15110e;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  width: 1280px;
+  height: 720px;
+  overflow: hidden;
+  background: var(--deep);
+}
+
+.stage {
+  position: relative;
+  width: 1280px;
+  height: 720px;
+  overflow: hidden;
+  font: 400 16px/1.4 "Plex Mono", ui-monospace, monospace;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  background: radial-gradient(110% 95% at 50% 40%, #241c16 0%, #17120f 50%, var(--deep) 100%);
+}
+.stage > * { position: absolute; left: 0; top: 0; }
+
+/* A faint honeycomb, strongest towards the edges. */
+.comb {
+  opacity: 0.06;
+  -webkit-mask-image: radial-gradient(75% 85% at 50% 45%, transparent 35%, #000 100%);
+}
+.comb path { fill: none; stroke: var(--text); stroke-width: 1; }
+
+.glow {
+  width: 1100px;
+  height: 760px;
+  margin: -380px 0 0 -550px;
+  background: radial-gradient(closest-side, rgba(240, 169, 46, 0.11), rgba(240, 169, 46, 0));
+}
+.hex-glow {
+  width: 560px;
+  height: 560px;
+  margin: -280px 0 0 -280px;
+  background: radial-gradient(closest-side, rgba(240, 169, 46, 0.14), rgba(240, 169, 46, 0));
+}
+
+/* ---- the window ---------------------------------------------------------- */
+
+.window, .window-shadow {
+  width: 720px;
+  height: 480px;
+  border-radius: 9px;
+  transform-origin: 0 0;
+}
+.window { overflow: hidden; }
+.window iframe { display: block; width: 720px; height: 480px; border: 0; }
+.window-shadow {
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), 0 8px 20px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(242, 235, 227, 0.07);
+}
+
+.ring path { fill: none; stroke: var(--honey); stroke-width: 2.5; stroke-linejoin: round; }
+
+/* ---- the hexagon: logo, then hive ------------------------------------------ */
+
+.hive { width: 64px; height: 64px; transform-origin: 0 0; }
+.hive svg { display: block; width: 64px; height: 64px; overflow: visible; }
+.hive-body { fill: var(--honey); }
+.hive-stripes { fill: none; stroke: var(--ink); stroke-width: 4.2; }
+.hive-count {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font: 600 17px/1 "Plex Mono", ui-monospace, monospace;
+  color: var(--ink);
+}
+
+/* ---- the bee (fold.css) ------------------------------------------------------- */
+
+.bee { width: 34px; height: 34px; }
+.bee-art { display: block; width: 34px; height: 34px; overflow: visible; filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.4)); }
+.bee-wing { fill: rgba(242, 235, 227, 0.72); stroke: rgba(21, 17, 14, 0.55); stroke-width: 0.8; }
+.bee-sting { fill: #15110e; }
+.bee-body { fill: #f0a92e; stroke: #15110e; stroke-width: 1.1; }
+.bee-stripe { fill: #15110e; }
+.bee-head { fill: #2a211b; stroke: rgba(242, 235, 227, 0.55); stroke-width: 0.9; }
+.bee-eye { fill: #f2ebe3; }
+.bee-wings { transform-box: view-box; transform-origin: 14px 13px; }
+
+/* ---- a notification, a cursor --------------------------------------------- */
+
+.toast {
+  width: 380px;
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  gap: 14px;
+  align-items: center;
+  padding: 14px 18px 14px 14px;
+  border-radius: 12px;
+  background: rgba(38, 31, 26, 0.97);
+  border: 1px solid rgba(242, 235, 227, 0.1);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+}
+.toast img { display: block; width: 46px; height: 46px; }
+.toast-app { font-size: 12px; color: var(--faint); }
+.toast-title { margin: 1px 0 2px; font-size: 15px; font-weight: 600; }
+.toast-body { font-size: 13px; color: var(--muted); }
+
+.cursor { width: 24px; height: 24px; overflow: visible; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.55)); }
+.cursor path { fill: var(--text); stroke: var(--ink); stroke-width: 1.4; stroke-linejoin: round; }
+
+.ripple { width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--honey); }
+
+/* ---- words ------------------------------------------------------------------ */
+
+.scrim {
+  top: 520px;
+  width: 1280px;
+  height: 200px;
+  background: linear-gradient(to bottom, rgba(13, 10, 8, 0), rgba(13, 10, 8, 0.9) 62%);
+}
+
+.caption {
+  width: 1280px;
+  text-align: center;
+  font: 500 26px/1 "Plex Mono", ui-monospace, monospace;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.caption b { font-weight: 600; color: var(--honey); }
+
+.wordmark {
+  font: 600 78px/1 "Plex Mono", ui-monospace, monospace;
+  letter-spacing: -0.02em;
+  white-space: pre;
+}
+.caret {
+  position: absolute;
+  top: 8px;
+  width: 6px;
+  height: 66px;
+  border-radius: 1px;
+  background: var(--honey);
+}
+
+.line {
+  width: 1280px;
+  text-align: center;
+  font: 400 24px/1 "Plex Mono", ui-monospace, monospace;
+  color: var(--muted);
+}
+.line.link { color: var(--honey); }
+.fine {
+  width: 1280px;
+  text-align: center;
+  font: 400 14px/1 "Plex Mono", ui-monospace, monospace;
+  color: var(--faint);
+}

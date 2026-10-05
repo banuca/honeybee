@@ -9,6 +9,7 @@
     "test:electron": "electron test/electron-smoke.js",
     "screens": "electron test/electron-smoke.js --screens test-results/screenshots",
     "icons": "electron scripts/make-icons.js",
+    "promo": "electron promo/render.js",
     "build": "electron-builder --publish=never",
     "build:win": "electron-builder --win --publish=never",
     "build:mac": "electron-builder --mac --publish=never",
