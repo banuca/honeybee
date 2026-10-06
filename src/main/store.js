@@ -20,13 +20,17 @@ function readJson(file) {
  * private file stays private. New files are private by default.
  */
 function writeJsonAtomic(file, data) {
+  writeTextAtomic(file, JSON.stringify(data, null, 2) + '\n');
+}
+
+function writeTextAtomic(file, text) {
   let target = file;
   try { target = fs.realpathSync(file); } catch (_) { /* does not exist yet */ }
   fs.mkdirSync(path.dirname(target), { recursive: true });
   let mode = 0o600;
   try { mode = fs.statSync(target).mode & 0o777; } catch (_) { /* new file */ }
   const temp = `${target}.${process.pid}.${Date.now()}.tmp`;
-  fs.writeFileSync(temp, JSON.stringify(data, null, 2) + '\n', { encoding: 'utf8', mode });
+  fs.writeFileSync(temp, text, { encoding: 'utf8', mode });
   try {
     fs.chmodSync(temp, mode); // writeFileSync's mode is narrowed by the umask
   } catch (_) { /* best effort; Windows ignores it */ }
@@ -109,4 +113,4 @@ class JsonStore {
   }
 }
 
-module.exports = { JsonStore, readJson, writeJsonAtomic };
+module.exports = { JsonStore, readJson, writeJsonAtomic, writeTextAtomic };

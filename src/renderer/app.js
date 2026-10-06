@@ -132,7 +132,7 @@ function connections() {
   const out = {};
   for (const agent of ['claude', 'codex']) {
     const i = state.integrations[agent];
-    out[agent] = { connected: i.connected, present: i.present, check: i.check, heard: Boolean(i.hookSeenAt) };
+    out[agent] = { connected: i.connected, present: i.present, check: i.check, heard: Boolean(i.hookSeenAt), terminal: i.terminal || null };
   }
   return out;
 }
@@ -372,7 +372,7 @@ function providerBlock(agent, data, now) {
   if (data && data.windows.length) {
     for (const w of data.windows) block.append(windowRow(w, now));
     if (agent === 'claude' && claudeStale(now)) {
-      block.append(h('p', { class: 'provider-note', text: 'Claude Code sends fresh numbers after each reply in a terminal, not from the VS Code panel.' }));
+      block.append(claudeTerminalOffer() || h('p', { class: 'provider-note', text: 'Claude Code sends fresh numbers after each reply in a terminal, not from the VS Code panel.' }));
     }
     return block;
   }
@@ -385,6 +385,8 @@ function providerBlock(agent, data, now) {
       empty.append(h('p', { text: 'Your own status line is in place, so Claude Code can\'t pass its limits to honeybee. You can replace it in settings.' }));
     } else {
       empty.append(h('p', { text: 'Waiting for Claude Code. It shares its limits only with sessions in a terminal (the VS Code panel doesn\'t), so they appear after your next reply there. Pro and Max plans only.' }));
+      const offer = claudeTerminalOffer();
+      if (offer) empty.append(offer);
     }
   } else if (!integ.present) {
     empty.append(h('p', { text: 'Codex isn\'t set up on this computer.' }));
@@ -395,9 +397,55 @@ function providerBlock(agent, data, now) {
   return block;
 }
 
+// Claude Code in VS Code can run in the terminal instead of its panel, and
+// then every reply brings fresh limits. honeybee offers to switch that on.
+function claudeTerminalOffer() {
+  const t = state.integrations.claude.terminal;
+  if (!t || !t.found) return null;
+  const wrap = h('div', { class: 'provider-offer' });
+  if (t.on) {
+    wrap.append(h('p', { class: 'provider-note', text: 'Claude Code in VS Code now opens in its terminal. Fresh numbers arrive after your next reply in a new Claude tab.' }));
+  } else if (ui.confirm === 'terminal') {
+    wrap.append(terminalConfirm(t));
+  } else {
+    wrap.append(
+      h('p', { class: 'provider-note', text: 'Claude Code sends fresh numbers only from a terminal, not from the VS Code panel.' }),
+      h('button', { class: 'button', onclick: () => { ui.confirm = 'terminal'; ui.messages.terminal = null; render(); } }, 'keep claude numbers live'));
+  }
+  if (ui.messages.terminal) wrap.append(h('p', { class: `message ${ui.messages.terminal.ok ? 'is-ok' : 'is-error'}`, text: ui.messages.terminal.text }));
+  return wrap;
+}
+
+function terminalConfirm(t) {
+  const names = t.editors.map((e) => e.name).join(' and ');
+  return h('div', { class: 'confirm' },
+    h('p', { text: `honeybee will turn on Claude Code's Use Terminal setting in ${names}:` }),
+    h('ul', {}, [
+      'new Claude Code tabs open in the terminal instead of the panel',
+      'every reply there sends fresh limits to honeybee',
+      'tabs already open stay as they are; you can turn this off in settings'
+    ].map((text) => h('li', { text }))),
+    h('p', { class: 'quiet', text: 'Your current file is kept as settings.json.before-honeybee.' }),
+    h('div', { class: 'actions' },
+      h('button', { class: 'button', disabled: ui.busy === 'terminal', onclick: () => doClaudeTerminal(true) }, ui.busy === 'terminal' ? 'turning on' : 'turn on'),
+      h('button', { class: 'button is-quiet', onclick: () => { ui.confirm = null; render(); } }, 'cancel')));
+}
+
+async function doClaudeTerminal(on) {
+  ui.busy = 'terminal';
+  render();
+  const result = await api.setClaudeTerminal(on);
+  ui.busy = null;
+  ui.confirm = null;
+  ui.messages.terminal = result && result.ok
+    ? { ok: true, text: on ? 'Turned on. Open a new Claude Code tab in VS Code.' : 'Turned off. New Claude Code tabs open in the panel again.' }
+    : { ok: false, text: (result && result.message) || 'Could not change the setting.' };
+  render();
+}
+
 function renderUsage() {
   const now = Date.now();
-  if (!changedSince('usage', state.usage, connections(), localeInUse, claudeStale(now))) return;
+  if (!changedSince('usage', state.usage, connections(), localeInUse, claudeStale(now), ui.confirm, ui.busy, ui.messages.terminal)) return;
   document.getElementById('providers').replaceChildren(
     providerBlock('claude', state.usage.claude, now),
     providerBlock('codex', state.usage.codex, now)
@@ -507,13 +555,21 @@ function textSize() {
       h('span', { class: 'quiet', text: `or ${key} + and ${key} −` })));
 }
 
+function terminalToggle() {
+  const t = state.integrations.claude.terminal;
+  if (!t || !t.found) return null;
+  const input = h('input', { type: 'checkbox', disabled: ui.busy === 'terminal', onchange: (e) => doClaudeTerminal(e.target.checked) });
+  input.checked = t.on;
+  return h('label', { class: 'toggle terminal-toggle' }, input, h('span', { text: 'open claude code in vs code\'s terminal, so its limits stay live' }));
+}
+
 function renderSettings() {
   if (!changedSince('settings', state.settings, connections(), state.server, state.update, state.version, ui)) return;
   const body = document.getElementById('settings-body');
   const theme = state.settings.theme;
   const segment = (value) => h('button', { 'aria-pressed': String(theme === value), onclick: () => api.setSetting('theme', value) }, value);
   body.replaceChildren(
-    h('div', { class: 'group' }, h('h3', { text: 'connections' }), connectionRow('claude'), connectionRow('codex')),
+    h('div', { class: 'group' }, h('h3', { text: 'connections' }), connectionRow('claude'), terminalToggle(), connectionRow('codex')),
     h('div', { class: 'group' }, h('h3', { text: 'alerts' }),
       toggle('notifyNeedsYou', 'when an agent needs you'),
       toggle('notifyDone', 'when an agent finishes'),

@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('honeybee', {
   connect: (agent, options) => ipcRenderer.invoke('integration:connect', agent, options),
   disconnect: (agent) => ipcRenderer.invoke('integration:disconnect', agent),
   dismiss: (key) => ipcRenderer.invoke('session:dismiss', key),
+  setClaudeTerminal: (on) => ipcRenderer.invoke('claude:terminal', on),
   setSetting: (key, value) => ipcRenderer.invoke('settings:set', key, value),
   retryServer: () => ipcRenderer.invoke('server:retry'),
   checkUpdate: () => ipcRenderer.invoke('app:check-update'),

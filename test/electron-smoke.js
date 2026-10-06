@@ -66,6 +66,17 @@ fs.writeFileSync(path.join(dayDir, 'rollout-smoke-codex.jsonl'), [
   { timestamp: ts, type: 'event_msg', payload: { type: 'task_complete', turn_id: 't', last_agent_message: 'Renamed five files.', completed_at: (now - 20000) / 1000 } }
 ].map((e) => JSON.stringify(e)).join('\n') + '\n');
 
+// VS Code with the Claude Code extension, for the "keep claude numbers live"
+// switch. Settings live where each platform keeps them; honeybee is pointed
+// at this fake home for all three.
+const vscodeBase = process.platform === 'darwin' ? path.join(home, 'Library', 'Application Support') : path.join(home, 'appdata');
+const vscodeSettings = path.join(vscodeBase, 'Code', 'User', 'settings.json');
+fs.mkdirSync(path.dirname(vscodeSettings), { recursive: true });
+fs.writeFileSync(vscodeSettings, '{\n    // mine\n    "editor.fontSize": 14,\n}\n');
+fs.mkdirSync(path.join(home, '.vscode', 'extensions', 'anthropic.claude-code-2.1.291'), { recursive: true });
+process.env.APPDATA = vscodeBase;
+process.env.XDG_CONFIG_HOME = vscodeBase;
+
 process.env.HONEYBEE_HOME = home;
 process.env.HONEYBEE_USER_DATA = path.join(root, 'userData');
 process.env.HONEYBEE_PORT = '0';
@@ -205,6 +216,19 @@ async function run() {
   honeybee.setSetting(ctl, 'view', 'usage');
   const note = await until(() => js(main, `(() => { const n = document.querySelector('.provider-note'); return n && n.textContent; })()`));
   check('an old claude reading says how to get a fresh one', note && note.includes('terminal'), String(note));
+  const clickText = (label) => js(main, `(() => { const b = [...document.querySelectorAll('#providers button')].find((x) => x.textContent === ${JSON.stringify(label)}); if (b) b.click(); return Boolean(b); })()`);
+  await capture(main, 'claude-offer');
+  check('it offers to keep them live from VS Code', await until(() => clickText('keep claude numbers live')));
+  const askText = await until(() => js(main, `(() => { const c = document.querySelector('#providers .confirm'); return c && c.textContent; })()`));
+  check('and says what will change before changing it', askText && askText.includes('VS Code') && askText.includes('before-honeybee')
+    && !fs.readFileSync(vscodeSettings, 'utf8').includes('useTerminal'), String(askText));
+  await capture(main, 'claude-offer-confirm');
+  await clickText('turn on');
+  const liveNote = await until(() => js(main, `(() => { const n = document.querySelector('#providers .provider-note'); return n && n.textContent.includes('now opens in its terminal') && n.textContent; })()`));
+  await capture(main, 'claude-offer-on');
+  const vsText = fs.readFileSync(vscodeSettings, 'utf8');
+  check('turning it on writes one line to the VS Code settings, keeps the rest and a backup', Boolean(liveNote)
+    && vsText.includes('"claudeCode.useTerminal": true') && vsText.includes('// mine') && fs.existsSync(`${vscodeSettings}.before-honeybee`), vsText);
   ctl.usage.claude.observedAt = Date.now();
   honeybee.setSetting(ctl, 'view', 'usage');
   check('each window is a honeycomb of ten cells', (await js(main, 'document.querySelectorAll(".window").length')) === 4

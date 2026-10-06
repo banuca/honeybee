@@ -350,6 +350,9 @@ button { font: inherit; color: inherit; }
 
 .provider .empty p { margin-bottom: 8px; }
 .provider-note { margin: 2px 0 0; color: var(--faint); font-size: 11px; max-width: 52ch; }
+.provider-offer .button { margin-top: 8px; }
+.provider-offer .confirm { margin-top: 8px; }
+.terminal-toggle { margin: 4px 0 14px; }
 
 /* Text size: minus, the size, plus. */
 .stepper { display: inline-flex; align-items: center; border: 1px solid var(--rule); border-radius: 5px; overflow: hidden; }

@@ -18,6 +18,7 @@ const { CodexRollouts } = require('./codex-rollouts');
 const { CodexLimits } = require('./codex-limits');
 const transcripts = require('./claude-transcript');
 const integrations = require('./integrations');
+const vscodeSettings = require('./vscode-settings');
 const { createServer } = require('./server');
 const { fitBoundsToDisplays } = require('./window-bounds');
 const { parseReleaseResponse, releasesUrlFor } = require('./version-compare');
@@ -333,6 +334,25 @@ function cachedCheck(name, files, compute) {
   return value;
 }
 
+// Which editors have Claude Code changes rarely; look again once a minute.
+let editorsFound = { at: 0, list: [] };
+function claudeTerminalStatus() {
+  if (Date.now() - editorsFound.at > 60 * 1000) editorsFound = { at: Date.now(), list: vscodeSettings.findEditors() };
+  const files = editorsFound.list.map((e) => e.file);
+  return cachedCheck(`vscode:${files.join('|')}`, files, () => {
+    const editors = editorsFound.list.map(vscodeSettings.checkEditor);
+    return { found: editors.length > 0, on: editors.length > 0 && editors.every((e) => e.useTerminal), editors };
+  });
+}
+
+function setClaudeTerminal(ctl, on) {
+  const result = vscodeSettings.setAll(Boolean(on));
+  editorsFound.at = 0;
+  for (const r of result.results) if (!r.ok) ctl.log(`vscode settings: ${r.message}`);
+  push(ctl);
+  return { ok: result.ok, message: result.message, backups: result.results.flatMap((r) => r.backups || []) };
+}
+
 function integrationStatus(ctl) {
   const st = ctl.settings.data;
   const port = ctl.server && ctl.server.port ? ctl.server.port : st.port;
@@ -349,7 +369,8 @@ function integrationStatus(ctl) {
       file: claudeFile,
       present: fs.existsSync(paths.claudeDir()),
       hookSeenAt: ctl.seen.claudeHookAt,
-      statusLineSeenAt: ctl.seen.claudeStatusLineAt
+      statusLineSeenAt: ctl.seen.claudeStatusLineAt,
+      terminal: claudeTerminalStatus()
     },
     codex: {
       connected: Boolean(st.codex && st.codex.connected) && codex.hooks,
@@ -1238,6 +1259,7 @@ function setupIpc(ctl, env) {
   handle('session:dismiss', (key) => { if (typeof key === 'string') ctl.agents.dismiss(key); });
   handle('integration:connect', (agent, opts) => connect(ctl, agent, opts || {}));
   handle('integration:disconnect', (agent) => disconnect(ctl, agent));
+  handle('claude:terminal', (on) => setClaudeTerminal(ctl, on === true));
   handle('server:retry', () => moveToFreePort(ctl, env));
   handle('app:check-update', () => checkForUpdate(ctl, true));
   handle('app:open-external', (url) => {
