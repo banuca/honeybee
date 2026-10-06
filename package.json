@@ -1,6 +1,6 @@
 {
   "name": "honeybee",
-  "version": "4.1.0",
+  "version": "4.2.0",
   "description": "A tiny desktop widget that shows what your Claude Code and Codex agents are doing, the moment one needs you, and how much of your usage limits is left.",
   "main": "src/main/main.js",
   "scripts": {
