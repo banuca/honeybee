@@ -15,6 +15,7 @@ const { JsonStore } = require('./store');
 const { Agents } = require('./agents');
 const { Usage, parseStatusLine, statusLineText } = require('./usage');
 const { CodexRollouts } = require('./codex-rollouts');
+const { CodexLimits } = require('./codex-limits');
 const transcripts = require('./claude-transcript');
 const integrations = require('./integrations');
 const { createServer } = require('./server');
@@ -88,6 +89,7 @@ function start({ argv = process.argv, env = process.env, test = null } = {}) {
     server: null,
     serverError: null,
     rollouts: null,
+    codexLimits: null,
     main: null,
     bubble: null,
     bubbleReady: null,
@@ -470,6 +472,19 @@ function startWatchers(ctl, env) {
   });
   ctl.rollouts.start();
 
+  // The logs only change when Codex is used; ask Codex itself every few
+  // minutes too, so the limits stay current wherever Codex runs, or doesn't.
+  if (!env.HONEYBEE_OFFLINE) {
+    ctl.codexLimits = new CodexLimits({
+      env,
+      version: ctl.version,
+      log: ctl.log,
+      onUsage: (snapshot) => ctl.usage.setCodex(snapshot)
+    });
+    ctl.codexLimits.start();
+    powerMonitor.on('resume', () => ctl.codexLimits.soon());
+  }
+
   // Claude sessions active in the last few minutes, before any hook arrives.
   for (const t of transcripts.recentTranscripts(paths.claudeProjectsDir(), Date.now() - SEED_WINDOW_MS)) {
     if (ctl.agents.get('claude', t.sessionId)) continue;
@@ -616,6 +631,7 @@ function createMain(ctl, { show }) {
       fitFoldLayer(ctl);
     }, 400);
   };
+  win.on('show', () => { if (ctl.codexLimits) ctl.codexLimits.soon(); });
   win.on('move', rememberBounds);
   win.on('resize', rememberBounds);
 

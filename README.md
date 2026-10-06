@@ -48,7 +48,7 @@ Open settings (the gear) and press **connect** for each agent. honeybee shows ex
 honeybee never signs in to anything and never asks for a password or token.
 
 - **Claude**: Claude Code passes its own 5-hour and weekly readings to the status line command, and honeybee's status line forwards them. **Claude Code only does this in terminal sessions, not in the VS Code extension's panel**, so the numbers update whenever you use Claude Code in a terminal. To keep them current while you work in VS Code, turn on the extension's **Use Terminal** setting (`claudeCode.useTerminal`): Claude Code then runs in VS Code's terminal and every reply updates honeybee. When the reading is old, honeybee says so. Only Pro and Max plans have these limits, and Claude Code doesn't report per-model limits, such as the weekly Fable limit, to other apps.
-- **Codex**: Codex writes its rate limits into its session logs (`~/.codex/sessions`) on every turn, and honeybee reads the latest one.
+- **Codex**: every 5 minutes, and whenever you open the window, honeybee asks your installed Codex for its current limits (`codex app-server`, the same program the Codex IDE extension uses). No prompt is sent, so this uses none of your limits, and Codex does its own signing in. Between those reads, the limits Codex writes into its session logs (`~/.codex/sessions`) on every turn keep the numbers current. If Codex isn't installed as a program honeybee can find, the logs alone are used.
 
 A reading is always a snapshot. honeybee shows when each one was taken, and once a window's reset time passes it shows that window as reset instead of keeping the old number.
 
