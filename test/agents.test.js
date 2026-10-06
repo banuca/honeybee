@@ -157,6 +157,42 @@ test('codex: history found at startup never alerts, and stale turns show idle', 
   assert.strictEqual(alerts.length, 0);
 });
 
+test('codex: a turn read from the log is dated when it happened, not when honeybee read it', () => {
+  const { agents, now } = make();
+  const tenMinutesAgo = now() - 10 * 60 * 1000;
+  // Found at startup: finished, stopped, stale, or with no turn yet.
+  agents.codexLog({ id: 'fin', last: { kind: 'complete', at: tenMinutesAgo }, initial: true });
+  agents.codexLog({ id: 'esc', last: { kind: 'aborted', at: tenMinutesAgo }, initial: true });
+  agents.codexLog({ id: 'old', last: { kind: 'started', at: now() - 3 * 3600 * 1000 }, initial: true });
+  agents.codexLog({ id: 'new', startedAt: tenMinutesAgo, initial: true });
+  for (const id of ['fin', 'esc', 'new']) assert.strictEqual(agents.get('codex', id).statusSince, tenMinutesAgo, id);
+  assert.strictEqual(agents.get('codex', 'old').statusSince, now() - 3 * 3600 * 1000);
+
+  // Restored at restart as idle (it was mid-turn at quit), then the log says
+  // the turn finished ten minutes ago.
+  const before = new Agents({ now });
+  before.codexLog({ id: 'mid', last: { kind: 'started', at: now() } });
+  const saved = before.serialize();
+  now.advance(20 * 60 * 1000);
+  const finishedAt = now() - 10 * 60 * 1000;
+  const restarted = new Agents({ now });
+  restarted.restore(saved);
+  assert.strictEqual(restarted.get('codex', 'mid').status, 'idle');
+  restarted.codexLog({ id: 'mid', last: { kind: 'complete', at: finishedAt }, initial: true });
+  assert.strictEqual(restarted.get('codex', 'mid').status, 'done');
+  assert.strictEqual(restarted.get('codex', 'mid').statusSince, finishedAt);
+
+  // Saved already "done" but dated by an earlier restart: the log corrects it.
+  const misdated = new Agents({ now });
+  misdated.restore([{ key: 'codex:old-done', agent: 'codex', id: 'old-done', status: 'done', statusSince: now(), updatedAt: now(), pending: [], via: {} }]);
+  misdated.codexLog({ id: 'old-done', last: { kind: 'complete', at: finishedAt }, initial: true });
+  assert.strictEqual(misdated.get('codex', 'old-done').statusSince, finishedAt);
+
+  // A time in the future (a clock out of step) is never shown as ahead.
+  agents.codexLog({ id: 'skew', last: { kind: 'complete', at: now() + 60000 } });
+  assert.strictEqual(agents.get('codex', 'skew').statusSince, now());
+});
+
 test('list puts what needs you first; dismiss hides until the next event', () => {
   const { agents, now } = make();
   agents.claudeEvent(claude('UserPromptSubmit', { session_id: 'a' }));

@@ -107,13 +107,21 @@ class Agents {
     return s;
   }
 
-  /** Move a session to a status, raising an alert when the change is news. */
-  setStatus(s, status, { reason = null, quiet = false } = {}) {
+  /**
+   * Move a session to a status, raising an alert when the change is news.
+   * `at` is when it happened, for news read from a log after the fact.
+   */
+  setStatus(s, status, { reason = null, quiet = false, at = null } = {}) {
     const previous = s.status;
     s.reason = reason;
-    if (previous === status) return;
+    if (previous === status) {
+      // The log shows it began earlier than honeybee had it (saved before a
+      // restart that dated it by the restart): the log knows better.
+      if (at > 0 && at < s.statusSince) s.statusSince = at;
+      return;
+    }
     s.status = status;
-    s.statusSince = this.now();
+    s.statusSince = at > 0 ? Math.min(at, this.now()) : this.now();
     if (quiet) return;
     let kind = null;
     if (status === 'needs-you') kind = 'needs-you';
@@ -320,6 +328,8 @@ class Agents {
     }
     if (info.transcriptPath) s.transcriptPath = info.transcriptPath;
     const last = info.last;
+    // A session first met in its log is as old as its latest news there.
+    if (!existed) s.statusSince = Math.min(this.now(), (last && last.at) || info.startedAt || this.now());
     if (!last) {
       if (!existed) s.updatedAt = info.startedAt || this.now();
       this.onChange();
@@ -332,19 +342,20 @@ class Agents {
     }
     s.updatedAt = Math.max(s.updatedAt, last.at || 0);
     const quiet = Boolean(info.initial);
+    const at = last.at;
     if (last.kind === 'started') {
       if (quiet && last.at && this.now() - last.at > 30 * 60 * 1000) {
-        this.setStatus(s, 'idle', { quiet: true });
+        this.setStatus(s, 'idle', { quiet: true, at });
       } else if (s.status !== 'needs-you') {
-        this.setStatus(s, 'working', { quiet });
+        this.setStatus(s, 'working', { quiet, at });
       }
     } else if (last.kind === 'complete') {
       s.pending = [];
       if (last.lastMessage) s.lastMessage = last.lastMessage;
-      this.setStatus(s, 'done', { quiet });
+      this.setStatus(s, 'done', { quiet, at });
     } else if (last.kind === 'aborted') {
       s.pending = [];
-      this.setStatus(s, 'stopped', { quiet: true });
+      this.setStatus(s, 'stopped', { quiet: true, at });
     }
     if (!quiet) s.hidden = false;
     this.onChange();
